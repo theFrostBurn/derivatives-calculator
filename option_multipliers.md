@@ -20,6 +20,9 @@
 | 지수 | E-mini NASDAQ-100 | ONQ | 20 USD | 포인트 |
 | 지수 | Hang Seng Index | OHSI | 50 HKD | 포인트 |
 | 지수 | H-Share Index | OHHI | 50 HKD | 포인트 |
+| 지수 | 한국 KOSPI200 | KOSPI200 | 250,000 KRW | 원화 |
+| 지수 | 한국 KOSPI200 (미니) | KOSPI200M | 50,000 KRW | 원화 |
+| 지수 | 한국 KOSDAQ150 | KOSDAQ150 | 10,000 KRW | 원화 |
 | 금속 | 금 (Gold) | OGC | 100 USD | 트로이온스 |
 | 금속 | 은 (Silver) | OSI | 5,000 USD | 트로이온스 |
 | 에너지 | 크루드오일 (WTI) | OCL | 1,000 USD | 배럴 |

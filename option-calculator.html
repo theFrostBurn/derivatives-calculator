@@ -132,6 +132,16 @@
             gap: 0.5rem;
         }
 
+        .inline-field {
+            display: flex;
+            gap: 0.5rem;
+            align-items: center;
+        }
+
+        .fee-note {
+            color: #fbbf24;
+        }
+
         .result-item {
             font-size: 0.875rem;
         }
@@ -222,7 +232,7 @@
                     <div class="error" id="quotePriceError" style="display: none;"></div>
                 </div>
 
-                <div class="field">
+                <div class="field" id="fxField">
                     <label class="label" for="fxRate" id="fxRateLabel">환율 (KRW per USD)</label>
                     <input class="input" id="fxRate" type="number" value="1350" min="0" step="0.01">
                     <div class="help" id="fxRateHelp">예: 1350 = 1달러 1350원</div>
@@ -256,8 +266,12 @@
                     <div id="advancedDetails" class="advanced-panel">
                         <div class="field">
                             <label class="label" for="feePerContract">계약당 수수료 (편도)</label>
-                            <input class="input" id="feePerContract" type="number" value="1.00" min="0" step="0.01">
-                            <div class="help">수수료 통화는 선택한 종목의 결제통화(USD/HKD)로 가정합니다.</div>
+                            <div class="inline-field">
+                                <input class="input" id="feePerContract" type="text" value="0" readonly>
+                                <span class="help" id="feePerContractCurrency"></span>
+                            </div>
+                            <div class="help">종목에 따라 자동 적용됩니다.</div>
+                            <div class="help fee-note" id="feePerContractNote"></div>
                         </div>
 
                         <div class="field">
@@ -463,6 +477,63 @@
                 displayDecimals: 2,
             },
             {
+                assetClass: '지수',
+                name: '한국 KOSPI200',
+                id: 'KOSPI200',
+                code: 'KOSPI200',
+                multiplierText: '250,000 KRW',
+                note: '원화',
+                currency: 'KRW',
+                quoteUnitLabel: '포인트',
+                quoteHelp: '예: 1.0 (index point)',
+                parseMode: 'number',
+                valuePerQuoteUnit: 250000,
+                displayDecimals: 2,
+                feePolicy: {
+                    type: 'percent',
+                    rate: 0.15,
+                    label: '0.15 % (삼성증권 이벤트)',
+                },
+            },
+            {
+                assetClass: '지수',
+                name: '한국 KOSPI200 (미니)',
+                id: 'KOSPI200_MINI',
+                code: 'KOSPI200M',
+                multiplierText: '50,000 KRW',
+                note: '원화',
+                currency: 'KRW',
+                quoteUnitLabel: '포인트',
+                quoteHelp: '예: 1.0 (index point)',
+                parseMode: 'number',
+                valuePerQuoteUnit: 50000,
+                displayDecimals: 2,
+                feePolicy: {
+                    type: 'percent',
+                    rate: 0.15,
+                    label: '0.15 % (삼성증권 이벤트)',
+                },
+            },
+            {
+                assetClass: '지수',
+                name: '한국 KOSDAQ150',
+                id: 'KOSDAQ150',
+                code: 'KOSDAQ150',
+                multiplierText: '10,000 KRW',
+                note: '원화',
+                currency: 'KRW',
+                quoteUnitLabel: '포인트',
+                quoteHelp: '예: 1.0 (index point)',
+                parseMode: 'number',
+                valuePerQuoteUnit: 10000,
+                displayDecimals: 2,
+                feePolicy: {
+                    type: 'percent',
+                    rate: 0.15,
+                    label: '0.15 % (삼성증권 이벤트)',
+                },
+            },
+            {
                 assetClass: '주식',
                 name: '미국 개별주식 옵션',
                 id: 'US_STOCK',
@@ -608,7 +679,10 @@
         const DEFAULT_FX = {
             USD: 1350,
             HKD: 175,
+            KRW: 1,
         };
+
+        const LOCAL_CURRENCY = 'KRW';
 
         const el = {
             productSelect: document.getElementById('productSelect'),
@@ -619,6 +693,7 @@
             quotePrice: document.getElementById('quotePrice'),
             quotePriceHelp: document.getElementById('quotePriceHelp'),
             quotePriceError: document.getElementById('quotePriceError'),
+            fxField: document.getElementById('fxField'),
             fxRateLabel: document.getElementById('fxRateLabel'),
             fxRate: document.getElementById('fxRate'),
             fxRateHelp: document.getElementById('fxRateHelp'),
@@ -631,6 +706,8 @@
             requiredKrw: document.getElementById('requiredKrw'),
             calculationFormula: document.getElementById('calculationFormula'),
             feePerContract: document.getElementById('feePerContract'),
+            feePerContractCurrency: document.getElementById('feePerContractCurrency'),
+            feePerContractNote: document.getElementById('feePerContractNote'),
             profitPercentage: document.getElementById('profitPercentage'),
             oneWayFee: document.getElementById('oneWayFee'),
             totalFee: document.getElementById('totalFee'),
@@ -674,9 +751,6 @@
         }
 
         function applySavedDefaults() {
-            const fee = Number(safeGetItem(STORAGE.defaultsFeePerContract));
-            if (Number.isFinite(fee) && fee >= 0) el.feePerContract.value = String(fee);
-
             const pp = Number(safeGetItem(STORAGE.defaultsProfitPercentage));
             if (Number.isFinite(pp) && pp >= 0) el.profitPercentage.value = String(pp);
         }
@@ -696,9 +770,6 @@
             const quoteRaw = String(el.quotePrice.value ?? '').trim();
             const selectedKey = selectedProduct.id ?? selectedProduct.code;
             if (quoteRaw) safeSetItem(getQuoteDefaultKey(selectedKey), quoteRaw);
-
-            const fee = Number(el.feePerContract.value);
-            if (Number.isFinite(fee) && fee >= 0) safeSetItem(STORAGE.defaultsFeePerContract, String(fee));
 
             const pp = Number(el.profitPercentage.value);
             if (Number.isFinite(pp) && pp >= 0) safeSetItem(STORAGE.defaultsProfitPercentage, String(pp));
@@ -726,6 +797,16 @@
         function getCurrencySymbol(currency) {
             if (currency === 'USD') return '$';
             if (currency === 'HKD') return 'HK$';
+            if (currency === 'KRW') return '원';
+            return currency;
+        }
+
+        function isLocalCurrency(currency) {
+            return currency === LOCAL_CURRENCY;
+        }
+
+        function getCurrencyDisplayName(currency) {
+            if (currency === 'KRW') return 'KRW(원)';
             return currency;
         }
 
@@ -829,25 +910,67 @@
             return Number.isFinite(num) ? num : NaN;
         }
 
+        function getFeePolicy(product) {
+            const policy = product?.feePolicy;
+            if (policy?.type === 'percent') {
+                const rate = Number(policy.rate);
+                const safeRate = Number.isFinite(rate) ? rate : 0;
+                return {
+                    type: 'percent',
+                    rate: safeRate,
+                    label: policy.label || `${safeRate} %`,
+                };
+            }
+
+            if (policy?.type === 'flat') {
+                const amount = Number(policy.amount);
+                const safeAmount = Number.isFinite(amount) ? amount : 0;
+                const currencyLabel = getCurrencyDisplayName(product?.currency ?? 'USD');
+                return {
+                    type: 'flat',
+                    amount: safeAmount,
+                    label: policy.label || `${safeAmount} ${currencyLabel}`,
+                };
+            }
+
+            const currencyLabel = getCurrencyDisplayName(product?.currency ?? 'USD');
+            return {
+                type: 'flat',
+                amount: 2.49,
+                label: `2.49 ${currencyLabel} (유진투자선물 협의)`,
+            };
+        }
+
         function getFxStorageKey(currency) {
+            if (isLocalCurrency(currency)) return null;
             if (currency === 'HKD') return STORAGE.fxRateHKD;
             return STORAGE.fxRateUSD;
         }
 
         function getFxTimestampKey(currency) {
+            if (isLocalCurrency(currency)) return null;
             if (currency === 'HKD') return STORAGE.fxRateHKD_ts;
             return STORAGE.fxRateUSD_ts;
         }
 
         function getFxSourceKey(currency) {
+            if (isLocalCurrency(currency)) return null;
             if (currency === 'HKD') return STORAGE.fxRateHKD_source;
             return STORAGE.fxRateUSD_source;
         }
 
         function getFxStoredInfo(currency) {
+            if (isLocalCurrency(currency)) {
+                return { rate: 1, ts: null, source: '' };
+            }
+
             const rateKey = getFxStorageKey(currency);
             const tsKey = getFxTimestampKey(currency);
             const sourceKey = getFxSourceKey(currency);
+
+            if (!rateKey || !tsKey || !sourceKey) {
+                return { rate: null, ts: null, source: '' };
+            }
 
             const rate = Number(safeGetItem(rateKey));
             const ts = Number(safeGetItem(tsKey));
@@ -861,7 +984,9 @@
         }
 
         function getFxRateForCurrency(currency) {
+            if (isLocalCurrency(currency)) return 1;
             const key = getFxStorageKey(currency);
+            if (!key) return DEFAULT_FX[currency] ?? DEFAULT_FX.USD;
             const saved = safeGetItem(key);
             const parsed = Number(saved);
             if (Number.isFinite(parsed) && parsed > 0) return parsed;
@@ -872,6 +997,8 @@
             const rateKey = getFxStorageKey(currency);
             const tsKey = getFxTimestampKey(currency);
             const sourceKey = getFxSourceKey(currency);
+
+            if (!rateKey || !tsKey || !sourceKey) return;
 
             safeSetItem(rateKey, String(rate));
             safeSetItem(tsKey, String(Date.now()));
@@ -921,15 +1048,31 @@
                 ? "예: 110'16 또는 110.5"
                 : (product.parseMode === 'agCents' ? "예: 450'2 또는 450.25" : '예: 1.23');
 
-            const fxRate = getFxRateForCurrency(product.currency);
-            el.fxRateLabel.textContent = `환율 (KRW per ${product.currency})`;
-            el.fxRate.value = fxRate;
-            el.fxRateHelp.textContent = `예: ${fxRate} = 1${product.currency} ${fxRate}원`;
+            const isLocal = isLocalCurrency(product.currency);
+            if (isLocal) {
+                el.fxField.style.display = 'none';
+                el.fxRateLabel.textContent = '환율 (KRW 기준)';
+                el.fxRate.value = '1';
+                el.fxRateHelp.textContent = 'KRW 상품은 환율 적용 없음';
+                el.fxRate.disabled = true;
+                el.fxFetchBtn.disabled = true;
+            } else {
+                const fxRate = getFxRateForCurrency(product.currency);
+                el.fxField.style.display = '';
+                el.fxRateLabel.textContent = `환율 (KRW per ${product.currency})`;
+                el.fxRate.value = fxRate;
+                el.fxRateHelp.textContent = `예: ${fxRate} = 1${product.currency} ${fxRate}원`;
+                el.fxRate.disabled = false;
+                el.fxFetchBtn.disabled = false;
+            }
+
+            const currencyLabel = getCurrencyDisplayName(product.currency);
 
             const feeCurrencyEls = document.querySelectorAll('.feeCurrency');
-            for (const node of feeCurrencyEls) node.textContent = product.currency;
+            for (const node of feeCurrencyEls) node.textContent = currencyLabel;
 
-            el.requiredCurrency.textContent = product.currency;
+            el.requiredCurrency.textContent = currencyLabel;
+            if (el.feePerContractCurrency) el.feePerContractCurrency.textContent = currencyLabel;
 
             safeSetItem(STORAGE.selectedProductId, product.id ?? product.code);
             safeSetItem(STORAGE.selectedProductCode, product.code);
@@ -958,6 +1101,10 @@
         function updateFxStatus() {
             if (!selectedProduct) return;
             const currency = selectedProduct.currency;
+            if (isLocalCurrency(currency)) {
+                setFxStatus('KRW 상품은 환율 적용 없음');
+                return;
+            }
             const info = getFxStoredInfo(currency);
 
             if (!info.rate) {
@@ -1050,6 +1197,10 @@
             if (!selectedProduct) return;
 
             const currency = selectedProduct.currency;
+            if (isLocalCurrency(currency)) {
+                updateFxStatus();
+                return;
+            }
             if (!force && !isFxStale(currency)) {
                 updateFxStatus();
                 return;
@@ -1115,13 +1266,15 @@
                 labels.push(price.toFixed(product.displayDecimals));
             }
 
+            const currencyLabel = getCurrencyDisplayName(product.currency);
+
             chart = new Chart(ctx, {
                 type: 'line',
                 data: {
                     labels,
                     datasets: [
                         {
-                            label: `수익/손실 (${product.currency})`,
+                            label: `수익/손실 (${currencyLabel})`,
                             data,
                             borderColor: '#8884d8',
                             backgroundColor: 'rgba(136, 132, 216, 0.1)',
@@ -1151,7 +1304,7 @@
                         y: {
                             title: {
                                 display: true,
-                                text: `수익/손실 (${product.currency})`,
+                                text: `수익/손실 (${currencyLabel})`,
                                 color: 'white',
                             },
                             ticks: { color: 'white' },
@@ -1167,9 +1320,13 @@
 
             showQuoteError('');
 
+            const feePolicy = getFeePolicy(selectedProduct);
+            if (el.feePerContractNote) el.feePerContractNote.textContent = feePolicy.label || '';
+
             const quoteValue = parseQuoteValue(selectedProduct, el.quotePrice.value);
             if (!Number.isFinite(quoteValue) || quoteValue <= 0) {
                 resetResults();
+                el.feePerContract.value = '0';
                 if (String(el.quotePrice.value ?? '').trim()) showQuoteError('현재가를 숫자로 입력해 주세요.');
                 return;
             }
@@ -1177,14 +1334,28 @@
             const fxRate = Number(el.fxRate.value);
 
             const purchaseAmount = quoteValue * selectedProduct.valuePerQuoteUnit;
-            const purchaseKrw = (Number.isFinite(fxRate) && fxRate > 0) ? purchaseAmount * fxRate : NaN;
+            const purchaseKrw = isLocalCurrency(selectedProduct.currency)
+                ? purchaseAmount
+                : ((Number.isFinite(fxRate) && fxRate > 0) ? purchaseAmount * fxRate : NaN);
 
             el.requiredAmount.textContent = formatAmount(purchaseAmount, 2);
             el.requiredKrw.textContent = Number.isFinite(purchaseKrw) ? formatKrw(purchaseKrw) : '0';
             el.calculationFormula.textContent = getCalculationFormula(selectedProduct, quoteValue);
 
-            const feePerContract = Number(el.feePerContract.value) || 0;
             const profitPercentage = Number(el.profitPercentage.value) || 0;
+
+            let feePerContract = 0;
+            if (feePolicy.type === 'percent') {
+                feePerContract = purchaseAmount * (feePolicy.rate / 100);
+            } else {
+                feePerContract = feePolicy.amount;
+            }
+
+            const feeDisplayValue = isLocalCurrency(selectedProduct.currency)
+                ? Math.round(feePerContract)
+                : feePerContract;
+            const feeDigits = isLocalCurrency(selectedProduct.currency) ? 0 : 2;
+            el.feePerContract.value = formatAmount(feeDisplayValue, feeDigits);
 
             const oneWayFee = feePerContract;
             const totalFee = oneWayFee * 2;
@@ -1216,7 +1387,7 @@
 
             el.chartUnavailable.style.display = 'none';
             el.chartCanvas.style.display = 'block';
-            el.chartContext.textContent = `매도 시점 옵션가격 변화에 따른 손익(수수료 반영) · 통화: ${selectedProduct.currency}`;
+            el.chartContext.textContent = `매도 시점 옵션가격 변화에 따른 손익(수수료 반영) · 통화: ${getCurrencyDisplayName(selectedProduct.currency)}`;
             updateChart(quoteValue, selectedProduct, totalFee, targetProfitPrice);
         }
 
@@ -1248,7 +1419,6 @@
                 updateFxStatus();
                 recalculate();
             });
-            el.feePerContract.addEventListener('input', recalculate);
             el.profitPercentage.addEventListener('input', recalculate);
             el.fxFetchBtn.addEventListener('click', () => fetchAndApplyFxRate(true));
             el.saveDefaultsBtn.addEventListener('click', () => saveCurrentAsDefaults());
