@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Read(//c/Users/user/OneDrive/바탕 화면/**)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}

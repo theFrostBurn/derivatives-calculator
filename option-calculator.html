@@ -1,0 +1,1264 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>옵션 승수 최소구입금액 계산기</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            background-color: #111827;
+            color: white;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            min-height: 100vh;
+            padding: 1rem;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background-color: #1f2937;
+            border-radius: 0.5rem;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+        }
+
+        .header {
+            padding: 1.5rem;
+            border-bottom: 1px solid #374151;
+        }
+
+        .title {
+            font-size: 1.5rem;
+            font-weight: bold;
+            color: white;
+        }
+
+        .subtitle {
+            margin-top: 0.375rem;
+            font-size: 0.875rem;
+            color: #9ca3af;
+        }
+
+        .content {
+            display: flex;
+            padding: 1.5rem;
+            gap: 2rem;
+        }
+
+        .form-section {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+        }
+
+        .chart-section {
+            flex: 1;
+        }
+
+        .field {
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+        }
+
+        .label {
+            font-size: 0.875rem;
+            font-weight: 500;
+            color: white;
+        }
+
+        .input, .select {
+            padding: 0.5rem 0.75rem;
+            border: 1px solid #4b5563;
+            border-radius: 0.375rem;
+            background-color: #374151;
+            color: white;
+            font-size: 0.875rem;
+        }
+
+        .button {
+            padding: 0.5rem 0.75rem;
+            border: 1px solid #4b5563;
+            border-radius: 0.375rem;
+            background-color: #111827;
+            color: white;
+            font-size: 0.875rem;
+            cursor: pointer;
+        }
+
+        .button:hover {
+            border-color: #6366f1;
+        }
+
+        .button:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+
+        .input:focus, .select:focus {
+            outline: none;
+            border-color: #6366f1;
+            box-shadow: 0 0 0 1px #6366f1;
+        }
+
+        .input[readonly] {
+            opacity: 0.9;
+        }
+
+        .help {
+            font-size: 0.75rem;
+            color: #9ca3af;
+            line-height: 1.25;
+        }
+
+        .error {
+            font-size: 0.75rem;
+            color: #fca5a5;
+            line-height: 1.25;
+        }
+
+        .results {
+            padding-top: 1rem;
+            margin-top: 1rem;
+            border-top: 1px solid #374151;
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+        }
+
+        .result-item {
+            font-size: 0.875rem;
+        }
+
+        details {
+            border: 1px solid #374151;
+            border-radius: 0.5rem;
+            padding: 0.75rem;
+            background-color: rgba(17, 24, 39, 0.35);
+        }
+
+        details > summary {
+            cursor: pointer;
+            font-size: 0.875rem;
+            font-weight: 600;
+        }
+
+        details[open] > summary {
+            margin-bottom: 0.75rem;
+        }
+
+        .advanced-panel {
+            border: 1px solid #374151;
+            border-radius: 0.5rem;
+            padding: 0.75rem;
+            background-color: rgba(17, 24, 39, 0.35);
+            display: flex;
+            flex-direction: column;
+            gap: 0.75rem;
+        }
+
+        .krw-strong {
+            font-weight: 800;
+            font-size: 1.05rem;
+            color: #fbbf24;
+        }
+
+        .chart-container {
+            position: relative;
+            height: 300px;
+            margin-top: 1rem;
+        }
+
+        .chart-title {
+            font-size: 1.125rem;
+            font-weight: 600;
+            margin-bottom: 0.5rem;
+            text-align: right;
+            padding-right: 2rem;
+        }
+
+        @media (max-width: 768px) {
+            .content {
+                flex-direction: column;
+            }
+            .chart-title {
+                text-align: center;
+                padding-right: 0;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1 class="title">옵션 승수 기반 최소구입금액 계산기</h1>
+            <div class="subtitle">종목별 승수·단위 자동 적용 (1계약 기준)</div>
+        </div>
+
+        <div class="content">
+            <div class="form-section">
+                <div class="field">
+                    <label class="label" for="productSelect">종목 선택</label>
+                    <select class="select" id="productSelect"></select>
+                    <div class="help" id="productMeta"></div>
+                </div>
+
+                <div class="field">
+                    <label class="label" for="productMultiplier">옵션 승수 (자동)</label>
+                    <input class="input" id="productMultiplier" type="text" readonly>
+                    <div class="help" id="productNote"></div>
+                </div>
+
+                <div class="field">
+                    <label class="label" for="quotePrice" id="quotePriceLabel">현재가</label>
+                    <input class="input" id="quotePrice" type="text" inputmode="decimal" value="1" placeholder="예: 1.23">
+                    <div class="help" id="quotePriceHelp"></div>
+                    <div class="error" id="quotePriceError" style="display: none;"></div>
+                </div>
+
+                <div class="field">
+                    <label class="label" for="fxRate" id="fxRateLabel">환율 (KRW per USD)</label>
+                    <input class="input" id="fxRate" type="number" value="1350" min="0" step="0.01">
+                    <div class="help" id="fxRateHelp">예: 1350 = 1달러 1350원</div>
+                    <div style="display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap;">
+                        <button class="button" id="fxFetchBtn" type="button">환율 자동 불러오기</button>
+                        <span class="help" id="fxStatus"></span>
+                    </div>
+                </div>
+
+                <div class="results">
+                    <div class="result-item"><strong>계산식:</strong> <span id="calculationFormula">-</span></div>
+                    <div class="result-item"><strong>1계약 필요금액:</strong> <span id="requiredAmount">0</span> <span id="requiredCurrency">USD</span></div>
+                    <div class="result-item"><strong>원화 환산 금액:</strong> &#8361; <span id="requiredKrw" class="krw-strong">0</span></div>
+                </div>
+
+                <div style="display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap;">
+                    <button class="button" id="saveDefaultsBtn" type="button">현재 값들을 기본값으로 저장</button>
+                    <span class="help" id="defaultsStatus"></span>
+                </div>
+            </div>
+
+            <div class="chart-section" id="chartSection">
+                <h3 class="chart-title">수익/손실 차트 (1계약)</h3>
+                <div class="help" id="chartContext">매도 시점 옵션가격 변화에 따른 손익(수수료 반영)</div>
+                <div class="chart-container">
+                    <div class="error" id="chartUnavailable" style="display: none;">차트를 표시하려면 Chart.js 로딩이 필요합니다(오프라인이면 표시되지 않을 수 있음).</div>
+                    <canvas id="profitChart"></canvas>
+                </div>
+
+                <div style="margin-top: 1rem;">
+                    <div id="advancedDetails" class="advanced-panel">
+                        <div class="field">
+                            <label class="label" for="feePerContract">계약당 수수료 (편도)</label>
+                            <input class="input" id="feePerContract" type="number" value="1.00" min="0" step="0.01">
+                            <div class="help">수수료 통화는 선택한 종목의 결제통화(USD/HKD)로 가정합니다.</div>
+                        </div>
+
+                        <div class="field">
+                            <label class="label" for="profitPercentage">목표 순이익 (%)</label>
+                            <input class="input" id="profitPercentage" type="number" value="100" min="0" step="1">
+                        </div>
+
+                        <div class="results">
+                            <div class="result-item"><strong>수수료 (편도/왕복):</strong> <span id="oneWayFee">0</span> / <span id="totalFee">0</span> <span class="feeCurrency">USD</span></div>
+                            <div class="result-item"><strong>수수료 비율:</strong> <span id="feePercentage">0</span>%</div>
+                            <div class="result-item"><strong>손익 분기 가격:</strong> <span id="breakEvenPrice">0</span> (<span id="breakEvenPercentage">0</span>%)</div>
+                            <div class="result-item"><strong>목표 순이익 (+<span id="displayProfitPercentage">100</span>%) 가격:</strong> <span id="targetProfitPrice">0</span> (<span id="targetProfitPercentage">0</span>%)</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script>
+        const PRODUCTS = [
+            {
+                assetClass: '통화',
+                name: '호주달러',
+                id: 'OADU',
+                code: 'OADU',
+                multiplierText: '100,000 USD',
+                note: '통화단위',
+                currency: 'USD',
+                quoteUnitLabel: '포인트',
+                quoteHelp: '예: 0.0050',
+                parseMode: 'number',
+                valuePerQuoteUnit: 100000,
+                displayDecimals: 5,
+            },
+            {
+                assetClass: '통화',
+                name: '유로 FX',
+                id: 'OEUU',
+                code: 'OEUU',
+                multiplierText: '125,000 USD',
+                note: '통화단위',
+                currency: 'USD',
+                quoteUnitLabel: '포인트',
+                quoteHelp: '예: 0.0050',
+                parseMode: 'number',
+                valuePerQuoteUnit: 125000,
+                displayDecimals: 5,
+            },
+            {
+                assetClass: '통화',
+                name: '영국 파운드',
+                id: 'OGBU',
+                code: 'OGBU',
+                multiplierText: '62,500 USD',
+                note: '통화단위',
+                currency: 'USD',
+                quoteUnitLabel: '포인트',
+                quoteHelp: '예: 0.0050',
+                parseMode: 'number',
+                valuePerQuoteUnit: 62500,
+                displayDecimals: 5,
+            },
+            {
+                assetClass: '통화',
+                name: '일본 엔',
+                id: 'OJPU',
+                code: 'OJPU',
+                multiplierText: '12.50 USD',
+                note: '통화단위',
+                currency: 'USD',
+                quoteUnitLabel: '포인트',
+                quoteHelp: '예: 0.0050',
+                parseMode: 'number',
+                valuePerQuoteUnit: 12.5,
+                displayDecimals: 5,
+            },
+            {
+                assetClass: '금리',
+                name: '미국채 2년',
+                id: 'OZT',
+                code: 'OZT',
+                multiplierText: '2,000 USD',
+                note: '32분할 표기',
+                currency: 'USD',
+                quoteUnitLabel: '포인트',
+                quoteHelp: "예: 110'16 또는 110.5 (32분할 입력 지원)",
+                parseMode: 'bond32',
+                valuePerQuoteUnit: 2000,
+                displayDecimals: 4,
+            },
+            {
+                assetClass: '금리',
+                name: '미국채 5년',
+                id: 'OZF',
+                code: 'OZF',
+                multiplierText: '1,000 USD',
+                note: '32분할 표기',
+                currency: 'USD',
+                quoteUnitLabel: '포인트',
+                quoteHelp: "예: 110'16 또는 110.5 (32분할 입력 지원)",
+                parseMode: 'bond32',
+                valuePerQuoteUnit: 1000,
+                displayDecimals: 4,
+            },
+            {
+                assetClass: '금리',
+                name: '미국채 10년',
+                id: 'OZN',
+                code: 'OZN',
+                multiplierText: '1,000 USD',
+                note: '32분할 표기',
+                currency: 'USD',
+                quoteUnitLabel: '포인트',
+                quoteHelp: "예: 110'16 또는 110.5 (32분할 입력 지원)",
+                parseMode: 'bond32',
+                valuePerQuoteUnit: 1000,
+                displayDecimals: 4,
+            },
+            {
+                assetClass: '금리',
+                name: '미국채 30년',
+                id: 'OZB',
+                code: 'OZB',
+                multiplierText: '1,000 USD',
+                note: '32분할 표기',
+                currency: 'USD',
+                quoteUnitLabel: '포인트',
+                quoteHelp: "예: 110'16 또는 110.5 (32분할 입력 지원)",
+                parseMode: 'bond32',
+                valuePerQuoteUnit: 1000,
+                displayDecimals: 4,
+            },
+            {
+                assetClass: '지수',
+                name: 'S&P 500',
+                id: 'OES',
+                code: 'OES',
+                multiplierText: '50 USD',
+                note: '포인트',
+                currency: 'USD',
+                quoteUnitLabel: '포인트',
+                quoteHelp: '예: 12.5 (index point)',
+                parseMode: 'number',
+                valuePerQuoteUnit: 50,
+                displayDecimals: 2,
+            },
+            {
+                assetClass: '지수',
+                name: 'S&P 500 Weekly',
+                id: 'OESW',
+                code: 'OES1~OES4',
+                multiplierText: '50 USD',
+                note: '포인트',
+                currency: 'USD',
+                quoteUnitLabel: '포인트',
+                quoteHelp: '예: 12.5 (index point)',
+                parseMode: 'number',
+                valuePerQuoteUnit: 50,
+                displayDecimals: 2,
+            },
+            {
+                assetClass: '지수',
+                name: 'E-mini NASDAQ-100',
+                id: 'ONQ',
+                code: 'ONQ',
+                multiplierText: '20 USD',
+                note: '포인트',
+                currency: 'USD',
+                quoteUnitLabel: '포인트',
+                quoteHelp: '예: 18.0 (index point)',
+                parseMode: 'number',
+                valuePerQuoteUnit: 20,
+                displayDecimals: 2,
+            },
+            {
+                assetClass: '지수',
+                name: 'Hang Seng Index',
+                id: 'OHSI',
+                code: 'OHSI',
+                multiplierText: '50 HKD',
+                note: '포인트',
+                currency: 'HKD',
+                quoteUnitLabel: '포인트',
+                quoteHelp: '예: 50 (index point)',
+                parseMode: 'number',
+                valuePerQuoteUnit: 50,
+                displayDecimals: 2,
+            },
+            {
+                assetClass: '지수',
+                name: 'H-Share Index',
+                id: 'OHHI',
+                code: 'OHHI',
+                multiplierText: '50 HKD',
+                note: '포인트',
+                currency: 'HKD',
+                quoteUnitLabel: '포인트',
+                quoteHelp: '예: 50 (index point)',
+                parseMode: 'number',
+                valuePerQuoteUnit: 50,
+                displayDecimals: 2,
+            },
+            {
+                assetClass: '주식',
+                name: '미국 개별주식 옵션',
+                id: 'US_STOCK',
+                code: 'US_STOCK',
+                multiplierText: '100 USD',
+                note: '옵션 프리미엄(USD) × 100주',
+                currency: 'USD',
+                quoteUnitLabel: '프리미엄(USD)',
+                quoteHelp: '예: 1.23 (옵션 프리미엄 $1.23 → 1계약 $123)',
+                parseMode: 'number',
+                valuePerQuoteUnit: 100,
+                displayDecimals: 2,
+            },
+            {
+                assetClass: '금속',
+                name: '금 (Gold)',
+                id: 'OGC',
+                code: 'OGC',
+                multiplierText: '100 USD',
+                note: '트로이온스',
+                currency: 'USD',
+                quoteUnitLabel: '$/oz',
+                quoteHelp: '예: 2.5 ($ per oz)',
+                parseMode: 'number',
+                valuePerQuoteUnit: 100,
+                displayDecimals: 2,
+            },
+            {
+                assetClass: '금속',
+                name: '은 (Silver)',
+                id: 'OSI',
+                code: 'OSI',
+                multiplierText: '5,000 USD',
+                note: '트로이온스',
+                currency: 'USD',
+                quoteUnitLabel: '$/oz',
+                quoteHelp: '예: 0.5 ($ per oz)',
+                parseMode: 'number',
+                valuePerQuoteUnit: 5000,
+                displayDecimals: 3,
+            },
+            {
+                assetClass: '에너지',
+                name: '크루드오일 (WTI)',
+                id: 'OCL',
+                code: 'OCL',
+                multiplierText: '1,000 USD',
+                note: '배럴',
+                currency: 'USD',
+                quoteUnitLabel: '$/배럴',
+                quoteHelp: '예: 1.2 ($ per barrel)',
+                parseMode: 'number',
+                valuePerQuoteUnit: 1000,
+                displayDecimals: 3,
+            },
+            {
+                assetClass: '에너지',
+                name: '천연가스',
+                id: 'ONG',
+                code: 'ONG',
+                multiplierText: '10,000 USD',
+                note: '에너지 단위',
+                currency: 'USD',
+                quoteUnitLabel: '$/MMBtu',
+                quoteHelp: '예: 0.05 ($ per MMBtu)',
+                parseMode: 'number',
+                valuePerQuoteUnit: 10000,
+                displayDecimals: 4,
+            },
+            {
+                assetClass: '농산물',
+                name: '옥수수',
+                id: 'OZC',
+                code: 'OZC',
+                multiplierText: '50 USD',
+                note: '센트/부셸',
+                currency: 'USD',
+                quoteUnitLabel: '¢/부셸',
+                quoteHelp: '예: 450\'2 또는 450.25',
+                parseMode: 'agCents',
+                valuePerQuoteUnit: 50,
+                displayDecimals: 2,
+            },
+            {
+                assetClass: '농산물',
+                name: '대두(콩)',
+                id: 'OZM_SOYBEAN',
+                code: 'OZM',
+                multiplierText: '50 USD',
+                note: '센트/부셸',
+                currency: 'USD',
+                quoteUnitLabel: '¢/부셸',
+                quoteHelp: '예: 1200\'4 또는 1200.5',
+                parseMode: 'agCents',
+                valuePerQuoteUnit: 50,
+                displayDecimals: 2,
+            },
+            {
+                assetClass: '농산물',
+                name: '대두박',
+                id: 'OZM_SOYMEAL',
+                code: 'OZM',
+                multiplierText: '100 USD',
+                note: '센트/부셸',
+                currency: 'USD',
+                quoteUnitLabel: '¢/부셸',
+                quoteHelp: '예: 320\'4 또는 320.5',
+                parseMode: 'agCents',
+                valuePerQuoteUnit: 100,
+                displayDecimals: 2,
+            },
+            {
+                assetClass: '농산물',
+                name: '소맥(밀)',
+                id: 'OZW',
+                code: 'OZW',
+                multiplierText: '50 USD',
+                note: '센트/부셸',
+                currency: 'USD',
+                quoteUnitLabel: '¢/부셸',
+                quoteHelp: '예: 600\'0 또는 600.0',
+                parseMode: 'agCents',
+                valuePerQuoteUnit: 50,
+                displayDecimals: 2,
+            },
+        ];
+
+        const STORAGE = {
+            selectedProductId: 'optionCalculator.selectedProductId',
+            selectedProductCode: 'optionCalculator.selectedProductCode',
+            defaultsFeePerContract: 'optionCalculator.defaults.feePerContract',
+            defaultsProfitPercentage: 'optionCalculator.defaults.profitPercentage',
+            fxRateUSD: 'optionCalculator.fx.USD',
+            fxRateUSD_ts: 'optionCalculator.fx.USD.ts',
+            fxRateUSD_source: 'optionCalculator.fx.USD.source',
+            fxRateHKD: 'optionCalculator.fx.HKD',
+            fxRateHKD_ts: 'optionCalculator.fx.HKD.ts',
+            fxRateHKD_source: 'optionCalculator.fx.HKD.source',
+        };
+
+        const FX_CACHE_TTL_MS = 6 * 60 * 60 * 1000;
+
+        const DEFAULT_FX = {
+            USD: 1350,
+            HKD: 175,
+        };
+
+        const el = {
+            productSelect: document.getElementById('productSelect'),
+            productMeta: document.getElementById('productMeta'),
+            productMultiplier: document.getElementById('productMultiplier'),
+            productNote: document.getElementById('productNote'),
+            quotePriceLabel: document.getElementById('quotePriceLabel'),
+            quotePrice: document.getElementById('quotePrice'),
+            quotePriceHelp: document.getElementById('quotePriceHelp'),
+            quotePriceError: document.getElementById('quotePriceError'),
+            fxRateLabel: document.getElementById('fxRateLabel'),
+            fxRate: document.getElementById('fxRate'),
+            fxRateHelp: document.getElementById('fxRateHelp'),
+            fxFetchBtn: document.getElementById('fxFetchBtn'),
+            fxStatus: document.getElementById('fxStatus'),
+            saveDefaultsBtn: document.getElementById('saveDefaultsBtn'),
+            defaultsStatus: document.getElementById('defaultsStatus'),
+            requiredAmount: document.getElementById('requiredAmount'),
+            requiredCurrency: document.getElementById('requiredCurrency'),
+            requiredKrw: document.getElementById('requiredKrw'),
+            calculationFormula: document.getElementById('calculationFormula'),
+            feePerContract: document.getElementById('feePerContract'),
+            profitPercentage: document.getElementById('profitPercentage'),
+            oneWayFee: document.getElementById('oneWayFee'),
+            totalFee: document.getElementById('totalFee'),
+            feePercentage: document.getElementById('feePercentage'),
+            breakEvenPrice: document.getElementById('breakEvenPrice'),
+            breakEvenPercentage: document.getElementById('breakEvenPercentage'),
+            targetProfitPrice: document.getElementById('targetProfitPrice'),
+            targetProfitPercentage: document.getElementById('targetProfitPercentage'),
+            displayProfitPercentage: document.getElementById('displayProfitPercentage'),
+            chartUnavailable: document.getElementById('chartUnavailable'),
+            chartContext: document.getElementById('chartContext'),
+            chartCanvas: document.getElementById('profitChart'),
+        };
+
+        let selectedProduct = null;
+        let chart = null;
+
+        function safeGetItem(key) {
+            try {
+                return localStorage.getItem(key);
+            } catch {
+                return null;
+            }
+        }
+
+        function safeSetItem(key, value) {
+            try {
+                localStorage.setItem(key, value);
+            } catch {
+                // ignore
+            }
+        }
+
+        function setDefaultsStatus(message, tone = 'info') {
+            el.defaultsStatus.textContent = message || '';
+            el.defaultsStatus.style.color = tone === 'error' ? '#fca5a5' : '#9ca3af';
+        }
+
+        function getQuoteDefaultKey(productKey) {
+            return `optionCalculator.defaults.quotePrice.${productKey}`;
+        }
+
+        function applySavedDefaults() {
+            const fee = Number(safeGetItem(STORAGE.defaultsFeePerContract));
+            if (Number.isFinite(fee) && fee >= 0) el.feePerContract.value = String(fee);
+
+            const pp = Number(safeGetItem(STORAGE.defaultsProfitPercentage));
+            if (Number.isFinite(pp) && pp >= 0) el.profitPercentage.value = String(pp);
+        }
+
+        function applySavedQuoteForProduct(productKey) {
+            const raw = safeGetItem(getQuoteDefaultKey(productKey));
+            if (raw && String(raw).trim()) el.quotePrice.value = String(raw);
+        }
+
+        function saveCurrentAsDefaults() {
+            if (!selectedProduct) return;
+
+            const currency = selectedProduct.currency;
+            const fxRate = Number(el.fxRate.value);
+            if (Number.isFinite(fxRate) && fxRate > 0) setFxRateForCurrency(currency, fxRate, 'manual');
+
+            const quoteRaw = String(el.quotePrice.value ?? '').trim();
+            const selectedKey = selectedProduct.id ?? selectedProduct.code;
+            if (quoteRaw) safeSetItem(getQuoteDefaultKey(selectedKey), quoteRaw);
+
+            const fee = Number(el.feePerContract.value);
+            if (Number.isFinite(fee) && fee >= 0) safeSetItem(STORAGE.defaultsFeePerContract, String(fee));
+
+            const pp = Number(el.profitPercentage.value);
+            if (Number.isFinite(pp) && pp >= 0) safeSetItem(STORAGE.defaultsProfitPercentage, String(pp));
+
+            safeSetItem(STORAGE.selectedProductId, selectedKey);
+            safeSetItem(STORAGE.selectedProductCode, selectedProduct.code);
+
+            updateFxStatus();
+            setDefaultsStatus(`저장됨 · ${new Date().toLocaleString('ko-KR')}`);
+        }
+
+        function formatAmount(value, digits = 2) {
+            if (!Number.isFinite(value)) return '0';
+            return value.toLocaleString(undefined, {
+                minimumFractionDigits: digits,
+                maximumFractionDigits: digits,
+            });
+        }
+
+        function formatKrw(value) {
+            if (!Number.isFinite(value)) return '0';
+            return Math.round(value).toLocaleString('ko-KR');
+        }
+
+        function getCurrencySymbol(currency) {
+            if (currency === 'USD') return '$';
+            if (currency === 'HKD') return 'HK$';
+            return currency;
+        }
+
+        function parseBond32(raw) {
+            const s = String(raw ?? '')
+                .trim()
+                .replace(/,/g, '')
+                .replace(/[\u2019\u2018\u0060]/g, "'")
+                .replace(/[’`]/g, "'")
+                .replace(/\u2032/g, "'"); // prime -> apostrophe
+            if (!s) return NaN;
+
+            const asNumber = Number(s);
+            if (Number.isFinite(asNumber)) return asNumber;
+
+            // Examples (HTS style):
+            // - 110'16  => 110 + 16/32
+            // - 110'16+ => 110 + (16.5)/32
+            // - 0'16    => 0.5
+            // Legacy:
+            // - 110-16
+            const tickMatch = s.match(/^(-?\d+)\s*['-]\s*(\d+(?:\.\d+)?)(\+)?$/);
+            if (tickMatch) {
+                const whole = Number(tickMatch[1]);
+                let frac32 = Number(tickMatch[2]);
+                if (tickMatch[3] && Number.isFinite(frac32) && !tickMatch[2].includes('.')) frac32 += 0.5;
+                if (!Number.isFinite(whole) || !Number.isFinite(frac32)) return NaN;
+                return whole + (frac32 / 32);
+            }
+
+            // Example: 110 16/32
+            const fracMatch = s.match(/^(-?\d+)\s+(\d+)\s*\/\s*32$/);
+            if (fracMatch) {
+                const whole = Number(fracMatch[1]);
+                const frac32 = Number(fracMatch[2]);
+                if (!Number.isFinite(whole) || !Number.isFinite(frac32)) return NaN;
+                return whole + (frac32 / 32);
+            }
+
+            return NaN;
+        }
+
+        function parseAgCents(raw) {
+            const s = String(raw ?? '')
+                .trim()
+                .replace(/,/g, '')
+                .replace(/[\u2019\u2018\u0060]/g, "'")
+                .replace(/[’`]/g, "'")
+                .replace(/\u2032/g, "'"); // prime -> apostrophe
+            if (!s) return NaN;
+
+            const asNumber = Number(s);
+            if (Number.isFinite(asNumber)) return asNumber;
+
+            // HTS style (common): cents with 1/8 fractions.
+            // - 450'2 => 450 + 2/8 = 450.25
+            // Some UIs may show 2-digit fractions too:
+            // - 450'25 => 450.25
+            const tickMatch = s.match(/^(-?\d+)\s*'\s*(\d{1,3})$/);
+            if (tickMatch) {
+                const whole = Number(tickMatch[1]);
+                const fracStr = tickMatch[2];
+                const frac = Number(fracStr);
+                if (!Number.isFinite(whole) || !Number.isFinite(frac)) return NaN;
+
+                if (fracStr.length === 1) {
+                    if (frac < 0 || frac > 7) return NaN;
+                    return whole + (frac / 8);
+                }
+
+                if (fracStr.length === 2) {
+                    if (frac < 0 || frac > 99) return NaN;
+                    return whole + (frac / 100);
+                }
+
+                if (fracStr.length === 3) {
+                    if (frac < 0 || frac > 999) return NaN;
+                    return whole + (frac / 1000);
+                }
+            }
+
+            const fracMatch = s.match(/^(-?\d+)\s+(\d+)\s*\/\s*8$/);
+            if (fracMatch) {
+                const whole = Number(fracMatch[1]);
+                const frac = Number(fracMatch[2]);
+                if (!Number.isFinite(whole) || !Number.isFinite(frac)) return NaN;
+                return whole + (frac / 8);
+            }
+
+            return NaN;
+        }
+
+        function parseQuoteValue(product, raw) {
+            const s = String(raw ?? '').trim().replace(/,/g, '');
+            if (!s) return NaN;
+
+            if (product.parseMode === 'bond32') return parseBond32(s);
+            if (product.parseMode === 'agCents') return parseAgCents(s);
+
+            const num = Number(s);
+            return Number.isFinite(num) ? num : NaN;
+        }
+
+        function getFxStorageKey(currency) {
+            if (currency === 'HKD') return STORAGE.fxRateHKD;
+            return STORAGE.fxRateUSD;
+        }
+
+        function getFxTimestampKey(currency) {
+            if (currency === 'HKD') return STORAGE.fxRateHKD_ts;
+            return STORAGE.fxRateUSD_ts;
+        }
+
+        function getFxSourceKey(currency) {
+            if (currency === 'HKD') return STORAGE.fxRateHKD_source;
+            return STORAGE.fxRateUSD_source;
+        }
+
+        function getFxStoredInfo(currency) {
+            const rateKey = getFxStorageKey(currency);
+            const tsKey = getFxTimestampKey(currency);
+            const sourceKey = getFxSourceKey(currency);
+
+            const rate = Number(safeGetItem(rateKey));
+            const ts = Number(safeGetItem(tsKey));
+            const source = safeGetItem(sourceKey) || '';
+
+            return {
+                rate: Number.isFinite(rate) && rate > 0 ? rate : null,
+                ts: Number.isFinite(ts) && ts > 0 ? ts : null,
+                source,
+            };
+        }
+
+        function getFxRateForCurrency(currency) {
+            const key = getFxStorageKey(currency);
+            const saved = safeGetItem(key);
+            const parsed = Number(saved);
+            if (Number.isFinite(parsed) && parsed > 0) return parsed;
+            return DEFAULT_FX[currency] ?? DEFAULT_FX.USD;
+        }
+
+        function setFxRateForCurrency(currency, rate, source = 'manual') {
+            const rateKey = getFxStorageKey(currency);
+            const tsKey = getFxTimestampKey(currency);
+            const sourceKey = getFxSourceKey(currency);
+
+            safeSetItem(rateKey, String(rate));
+            safeSetItem(tsKey, String(Date.now()));
+            safeSetItem(sourceKey, String(source));
+        }
+
+        function buildProductSelect() {
+            const groups = new Map();
+            for (const product of PRODUCTS) {
+                if (!groups.has(product.assetClass)) groups.set(product.assetClass, []);
+                groups.get(product.assetClass).push(product);
+            }
+
+            el.productSelect.innerHTML = '';
+            for (const [assetClass, list] of groups.entries()) {
+                const optGroup = document.createElement('optgroup');
+                optGroup.label = assetClass;
+
+                for (const product of list) {
+                    const option = document.createElement('option');
+                    option.value = product.id ?? product.code;
+                    option.textContent = `${product.name} (${product.code})`;
+                    optGroup.appendChild(option);
+                }
+
+                el.productSelect.appendChild(optGroup);
+            }
+        }
+
+        function getProductByCode(code) {
+            const foundById = PRODUCTS.find((p) => (p.id ?? p.code) === code);
+            if (foundById) return foundById;
+            return PRODUCTS.find((p) => p.code === code) ?? PRODUCTS[0];
+        }
+
+        function updateProductUI(product) {
+            selectedProduct = product;
+
+            el.productMeta.textContent = `${product.assetClass} · 코드: ${product.code} · 결제통화: ${product.currency}`;
+
+            el.productMultiplier.value = product.multiplierText;
+            el.productNote.textContent = product.note ? `메모: ${product.note}` : '';
+
+            el.quotePriceLabel.textContent = `현재가 (${product.quoteUnitLabel})`;
+            el.quotePriceHelp.textContent = product.quoteHelp ?? '';
+            el.quotePrice.placeholder = product.parseMode === 'bond32'
+                ? "예: 110'16 또는 110.5"
+                : (product.parseMode === 'agCents' ? "예: 450'2 또는 450.25" : '예: 1.23');
+
+            const fxRate = getFxRateForCurrency(product.currency);
+            el.fxRateLabel.textContent = `환율 (KRW per ${product.currency})`;
+            el.fxRate.value = fxRate;
+            el.fxRateHelp.textContent = `예: ${fxRate} = 1${product.currency} ${fxRate}원`;
+
+            const feeCurrencyEls = document.querySelectorAll('.feeCurrency');
+            for (const node of feeCurrencyEls) node.textContent = product.currency;
+
+            el.requiredCurrency.textContent = product.currency;
+
+            safeSetItem(STORAGE.selectedProductId, product.id ?? product.code);
+            safeSetItem(STORAGE.selectedProductCode, product.code);
+            updateFxStatus();
+        }
+
+        function setFxStatus(message, tone = 'info') {
+            el.fxStatus.textContent = message || '';
+            el.fxStatus.style.color = tone === 'error' ? '#fca5a5' : '#9ca3af';
+        }
+
+        function formatDateTime(ts) {
+            try {
+                return new Date(ts).toLocaleString('ko-KR');
+            } catch {
+                return '';
+            }
+        }
+
+        function isFxStale(currency) {
+            const info = getFxStoredInfo(currency);
+            if (!info.ts) return true;
+            return (Date.now() - info.ts) > FX_CACHE_TTL_MS;
+        }
+
+        function updateFxStatus() {
+            if (!selectedProduct) return;
+            const currency = selectedProduct.currency;
+            const info = getFxStoredInfo(currency);
+
+            if (!info.rate) {
+                setFxStatus('저장된 환율 없음 (기본값 사용)');
+                return;
+            }
+
+            if (!info.ts) {
+                setFxStatus(`저장된 환율: ${formatAmount(info.rate, 2)} (시간 정보 없음) · 오래됨`);
+                return;
+            }
+
+            const sourceLabel = info.source === 'auto' ? '자동' : (info.source === 'manual' ? '수동' : '');
+            const timeLabel = info.ts ? formatDateTime(info.ts) : '';
+            const staleLabel = isFxStale(currency) ? ' · 오래됨' : '';
+            const base = [sourceLabel, timeLabel].filter(Boolean).join(' · ');
+            setFxStatus((base || `저장된 환율: ${formatAmount(info.rate, 2)}`) + staleLabel);
+        }
+
+        function showQuoteError(message) {
+            el.quotePriceError.textContent = message;
+            el.quotePriceError.style.display = message ? 'block' : 'none';
+        }
+
+        function resetResults() {
+            el.requiredAmount.textContent = '0';
+            el.requiredKrw.textContent = '0';
+            el.calculationFormula.textContent = '-';
+
+            el.oneWayFee.textContent = '0';
+            el.totalFee.textContent = '0';
+            el.feePercentage.textContent = '0';
+            el.breakEvenPrice.textContent = '0';
+            el.breakEvenPercentage.textContent = '0';
+            el.targetProfitPrice.textContent = '0';
+            el.targetProfitPercentage.textContent = '0';
+
+            if (chart) {
+                chart.destroy();
+                chart = null;
+            }
+        }
+
+        async function fetchJsonWithTimeout(url, timeoutMs = 7000) {
+            const controller = new AbortController();
+            const timer = setTimeout(() => controller.abort(), timeoutMs);
+
+            try {
+                const res = await fetch(url, {
+                    method: 'GET',
+                    signal: controller.signal,
+                    headers: { 'Accept': 'application/json' },
+                });
+                if (!res.ok) throw new Error(`HTTP ${res.status}`);
+                return await res.json();
+            } finally {
+                clearTimeout(timer);
+            }
+        }
+
+        async function fetchFxRateToKrw(fromCurrency) {
+            // Return number (KRW per fromCurrency)
+            const sources = [
+                async () => {
+                    const data = await fetchJsonWithTimeout(`https://api.frankfurter.app/latest?from=${encodeURIComponent(fromCurrency)}&to=KRW`);
+                    const rate = data?.rates?.KRW;
+                    if (!Number.isFinite(rate)) throw new Error('invalid response');
+                    return rate;
+                },
+                async () => {
+                    const data = await fetchJsonWithTimeout(`https://open.er-api.com/v6/latest/${encodeURIComponent(fromCurrency)}`);
+                    const rate = data?.rates?.KRW;
+                    if (!Number.isFinite(rate)) throw new Error('invalid response');
+                    return rate;
+                },
+            ];
+
+            let lastError = null;
+            for (const fn of sources) {
+                try {
+                    return await fn();
+                } catch (err) {
+                    lastError = err;
+                }
+            }
+            throw lastError ?? new Error('FX fetch failed');
+        }
+
+        async function fetchAndApplyFxRate(force = false) {
+            if (!selectedProduct) return;
+
+            const currency = selectedProduct.currency;
+            if (!force && !isFxStale(currency)) {
+                updateFxStatus();
+                return;
+            }
+
+            el.fxFetchBtn.disabled = true;
+            setFxStatus('환율 불러오는 중...');
+
+            try {
+                const rate = await fetchFxRateToKrw(currency);
+                const rounded = Math.round(rate * 100) / 100;
+                el.fxRate.value = String(rounded);
+                setFxRateForCurrency(currency, rounded, 'auto');
+                updateFxStatus();
+                recalculate();
+            } catch (err) {
+                console.error('FX fetch failed:', err);
+                setFxStatus('환율 자동 불러오기 실패 (수동 입력 가능)', 'error');
+            } finally {
+                el.fxFetchBtn.disabled = false;
+            }
+        }
+
+        function getCalculationFormula(product, quoteValue) {
+            const v = product.valuePerQuoteUnit;
+            const sym = getCurrencySymbol(product.currency);
+
+            if (product.assetClass === '농산물') {
+                return `${formatAmount(quoteValue, product.displayDecimals)} × ${sym}${formatAmount(v, 2)} = ${sym}${formatAmount(quoteValue * v, 2)}`;
+            }
+
+            if (product.assetClass === '금리') {
+                return `${formatAmount(quoteValue, product.displayDecimals)} × ${sym}${formatAmount(v, 2)} = ${sym}${formatAmount(quoteValue * v, 2)}`;
+            }
+
+            if (product.assetClass === '지수') {
+                return `${formatAmount(quoteValue, product.displayDecimals)} × ${sym}${formatAmount(v, 0)} = ${sym}${formatAmount(quoteValue * v, 2)}`;
+            }
+
+            return `${formatAmount(quoteValue, product.displayDecimals)} × ${formatAmount(v, 0)} = ${sym}${formatAmount(quoteValue * v, 2)}`;
+        }
+
+        function updateChart(buyPrice, product, totalFee, targetProfitPrice) {
+            if (typeof Chart === 'undefined') return;
+
+            const ctx = el.chartCanvas.getContext('2d');
+            if (!ctx) return;
+
+            if (chart) chart.destroy();
+
+            const valuePerQuoteUnit = product.valuePerQuoteUnit;
+            const points = 20;
+            const minPrice = buyPrice;
+            const maxPrice = Math.max(targetProfitPrice, buyPrice * 3);
+
+            const data = [];
+            const labels = [];
+
+            for (let i = 0; i <= points; i++) {
+                const price = minPrice + (maxPrice - minPrice) * (i / points);
+                const profit = (price - buyPrice) * valuePerQuoteUnit - totalFee;
+                data.push(profit);
+                labels.push(price.toFixed(product.displayDecimals));
+            }
+
+            chart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels,
+                    datasets: [
+                        {
+                            label: `수익/손실 (${product.currency})`,
+                            data,
+                            borderColor: '#8884d8',
+                            backgroundColor: 'rgba(136, 132, 216, 0.1)',
+                            borderWidth: 2,
+                            fill: true,
+                        },
+                    ],
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            labels: { color: 'white' },
+                        },
+                    },
+                    scales: {
+                        x: {
+                            title: {
+                                display: true,
+                                text: `가격 (${product.quoteUnitLabel})`,
+                                color: 'white',
+                            },
+                            ticks: { color: 'white' },
+                            grid: { color: 'rgba(255, 255, 255, 0.1)' },
+                        },
+                        y: {
+                            title: {
+                                display: true,
+                                text: `수익/손실 (${product.currency})`,
+                                color: 'white',
+                            },
+                            ticks: { color: 'white' },
+                            grid: { color: 'rgba(255, 255, 255, 0.1)' },
+                        },
+                    },
+                },
+            });
+        }
+
+        function recalculate() {
+            if (!selectedProduct) return;
+
+            showQuoteError('');
+
+            const quoteValue = parseQuoteValue(selectedProduct, el.quotePrice.value);
+            if (!Number.isFinite(quoteValue) || quoteValue <= 0) {
+                resetResults();
+                if (String(el.quotePrice.value ?? '').trim()) showQuoteError('현재가를 숫자로 입력해 주세요.');
+                return;
+            }
+
+            const fxRate = Number(el.fxRate.value);
+
+            const purchaseAmount = quoteValue * selectedProduct.valuePerQuoteUnit;
+            const purchaseKrw = (Number.isFinite(fxRate) && fxRate > 0) ? purchaseAmount * fxRate : NaN;
+
+            el.requiredAmount.textContent = formatAmount(purchaseAmount, 2);
+            el.requiredKrw.textContent = Number.isFinite(purchaseKrw) ? formatKrw(purchaseKrw) : '0';
+            el.calculationFormula.textContent = getCalculationFormula(selectedProduct, quoteValue);
+
+            const feePerContract = Number(el.feePerContract.value) || 0;
+            const profitPercentage = Number(el.profitPercentage.value) || 0;
+
+            const oneWayFee = feePerContract;
+            const totalFee = oneWayFee * 2;
+            const feePercentage = purchaseAmount > 0 ? (totalFee / purchaseAmount) * 100 : 0;
+
+            const breakEvenPrice = quoteValue + (totalFee / selectedProduct.valuePerQuoteUnit);
+            const breakEvenPercentage = ((breakEvenPrice / quoteValue - 1) * 100);
+
+            const profitMultiple = 1 + (profitPercentage / 100);
+            const targetProfitPrice = ((purchaseAmount * profitMultiple) + totalFee) / selectedProduct.valuePerQuoteUnit;
+            const targetProfitPercentage = ((targetProfitPrice / quoteValue - 1) * 100);
+
+            el.oneWayFee.textContent = formatAmount(oneWayFee, 2);
+            el.totalFee.textContent = formatAmount(totalFee, 2);
+            el.feePercentage.textContent = formatAmount(feePercentage, 2);
+
+            el.breakEvenPrice.textContent = breakEvenPrice.toFixed(selectedProduct.displayDecimals);
+            el.breakEvenPercentage.textContent = formatAmount(breakEvenPercentage, 2);
+
+            el.targetProfitPrice.textContent = targetProfitPrice.toFixed(selectedProduct.displayDecimals);
+            el.targetProfitPercentage.textContent = formatAmount(targetProfitPercentage, 2);
+            el.displayProfitPercentage.textContent = profitPercentage;
+
+            if (typeof Chart === 'undefined') {
+                el.chartUnavailable.style.display = 'block';
+                el.chartCanvas.style.display = 'none';
+                return;
+            }
+
+            el.chartUnavailable.style.display = 'none';
+            el.chartCanvas.style.display = 'block';
+            el.chartContext.textContent = `매도 시점 옵션가격 변화에 따른 손익(수수료 반영) · 통화: ${selectedProduct.currency}`;
+            updateChart(quoteValue, selectedProduct, totalFee, targetProfitPrice);
+        }
+
+        function bootstrap() {
+            buildProductSelect();
+            applySavedDefaults();
+
+            const savedId = safeGetItem(STORAGE.selectedProductId);
+            const savedCode = safeGetItem(STORAGE.selectedProductCode);
+            const initialKey = savedId || savedCode || 'OES';
+            const initialProduct = getProductByCode(initialKey);
+            el.productSelect.value = initialProduct.id ?? initialProduct.code;
+            updateProductUI(initialProduct);
+            applySavedQuoteForProduct(initialProduct.id ?? initialProduct.code);
+
+            el.productSelect.addEventListener('change', () => {
+                const product = getProductByCode(el.productSelect.value);
+                updateProductUI(product);
+                applySavedQuoteForProduct(product.id ?? product.code);
+                fetchAndApplyFxRate(false);
+                recalculate();
+            });
+
+            el.quotePrice.addEventListener('input', recalculate);
+            el.fxRate.addEventListener('input', () => {
+                if (!selectedProduct) return;
+                const rate = Number(el.fxRate.value);
+                if (Number.isFinite(rate) && rate > 0) setFxRateForCurrency(selectedProduct.currency, rate, 'manual');
+                updateFxStatus();
+                recalculate();
+            });
+            el.feePerContract.addEventListener('input', recalculate);
+            el.profitPercentage.addEventListener('input', recalculate);
+            el.fxFetchBtn.addEventListener('click', () => fetchAndApplyFxRate(true));
+            el.saveDefaultsBtn.addEventListener('click', () => saveCurrentAsDefaults());
+
+            resetResults();
+            recalculate();
+            fetchAndApplyFxRate(false);
+        }
+
+        bootstrap();
+    </script>
+</body>
+</html>
