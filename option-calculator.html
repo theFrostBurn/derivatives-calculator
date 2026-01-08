@@ -488,7 +488,7 @@
                 quoteHelp: '예: 1.0 (index point)',
                 parseMode: 'number',
                 valuePerQuoteUnit: 250000,
-                displayDecimals: 2,
+                displayDecimals: 0,
                 feePolicy: {
                     type: 'percent',
                     rate: 0.15,
@@ -507,7 +507,7 @@
                 quoteHelp: '예: 1.0 (index point)',
                 parseMode: 'number',
                 valuePerQuoteUnit: 50000,
-                displayDecimals: 2,
+                displayDecimals: 0,
                 feePolicy: {
                     type: 'percent',
                     rate: 0.15,
@@ -526,7 +526,26 @@
                 quoteHelp: '예: 1.0 (index point)',
                 parseMode: 'number',
                 valuePerQuoteUnit: 10000,
-                displayDecimals: 2,
+                displayDecimals: 0,
+                feePolicy: {
+                    type: 'percent',
+                    rate: 0.15,
+                    label: '0.15 % (삼성증권 이벤트)',
+                },
+            },
+            {
+                assetClass: '주식',
+                name: '한국 개별주식 옵션',
+                id: 'KR_STOCK',
+                code: 'KR_STOCK',
+                multiplierText: '10 주',
+                note: '옵션 1계약 = 10주',
+                currency: 'KRW',
+                quoteUnitLabel: '프리미엄(원)',
+                quoteHelp: '예: 2500 (옵션 프리미엄 2,500원 → 1계약 25,000원)',
+                parseMode: 'number',
+                valuePerQuoteUnit: 10,
+                displayDecimals: 0,
                 feePolicy: {
                     type: 'percent',
                     rate: 0.15,
@@ -808,6 +827,12 @@
         function getCurrencyDisplayName(currency) {
             if (currency === 'KRW') return 'KRW(원)';
             return currency;
+        }
+
+        function formatCurrencyValue(value, currency, digits = 2) {
+            const formatted = formatAmount(value, digits);
+            if (isLocalCurrency(currency)) return `${formatted} 원`;
+            return `${getCurrencySymbol(currency)}${formatted}`;
         }
 
         function parseBond32(raw) {
@@ -1226,21 +1251,25 @@
 
         function getCalculationFormula(product, quoteValue) {
             const v = product.valuePerQuoteUnit;
-            const sym = getCurrencySymbol(product.currency);
+            const currency = product.currency;
+            const isLocal = isLocalCurrency(currency);
+            const amountDigits = isLocal ? 0 : 2;
 
             if (product.assetClass === '농산물') {
-                return `${formatAmount(quoteValue, product.displayDecimals)} × ${sym}${formatAmount(v, 2)} = ${sym}${formatAmount(quoteValue * v, 2)}`;
+                const vDigits = isLocal ? 0 : 2;
+                return `${formatAmount(quoteValue, product.displayDecimals)} × ${formatCurrencyValue(v, currency, vDigits)} = ${formatCurrencyValue(quoteValue * v, currency, amountDigits)}`;
             }
 
             if (product.assetClass === '금리') {
-                return `${formatAmount(quoteValue, product.displayDecimals)} × ${sym}${formatAmount(v, 2)} = ${sym}${formatAmount(quoteValue * v, 2)}`;
+                const vDigits = isLocal ? 0 : 2;
+                return `${formatAmount(quoteValue, product.displayDecimals)} × ${formatCurrencyValue(v, currency, vDigits)} = ${formatCurrencyValue(quoteValue * v, currency, amountDigits)}`;
             }
 
             if (product.assetClass === '지수') {
-                return `${formatAmount(quoteValue, product.displayDecimals)} × ${sym}${formatAmount(v, 0)} = ${sym}${formatAmount(quoteValue * v, 2)}`;
+                return `${formatAmount(quoteValue, product.displayDecimals)} × ${formatCurrencyValue(v, currency, 0)} = ${formatCurrencyValue(quoteValue * v, currency, amountDigits)}`;
             }
 
-            return `${formatAmount(quoteValue, product.displayDecimals)} × ${formatAmount(v, 0)} = ${sym}${formatAmount(quoteValue * v, 2)}`;
+            return `${formatAmount(quoteValue, product.displayDecimals)} × ${formatAmount(v, 0)} = ${formatCurrencyValue(quoteValue * v, currency, amountDigits)}`;
         }
 
         function updateChart(buyPrice, product, totalFee, targetProfitPrice) {
@@ -1267,9 +1296,101 @@
             }
 
             const currencyLabel = getCurrencyDisplayName(product.currency);
+            const targetIndex = labels.reduce((closestIndex, label, idx) => {
+                const labelValue = Number(label);
+                if (!Number.isFinite(labelValue)) return closestIndex;
+                const currentDiff = Math.abs(labelValue - targetProfitPrice);
+                const closestLabel = Number(labels[closestIndex]);
+                const closestDiff = Math.abs(closestLabel - targetProfitPrice);
+                return currentDiff < closestDiff ? idx : closestIndex;
+            }, 0);
+            const targetLabel = labels[targetIndex] ?? targetProfitPrice.toFixed(product.displayDecimals);
+            const targetUnit = product.quoteUnitLabel ? ` ${product.quoteUnitLabel}` : '';
+            const targetLabelText = `가격: ${targetLabel}${targetUnit}`;
+
+            const targetLinePlugin = {
+                id: 'targetLine',
+                afterEvent(chart, args, pluginOptions) {
+                    const { event } = args;
+                    if (!event) return;
+                    const { chartArea, scales } = chart;
+                    if (!chartArea || !scales?.x) return;
+                    if (!Number.isFinite(pluginOptions?.targetIndex)) return;
+
+                    if (event.type === 'mouseout' || event.type === 'mouseleave') {
+                        if (chart.$targetLineHover) {
+                            chart.$targetLineHover = false;
+                            chart.draw();
+                        }
+                        return;
+                    }
+
+                    const x = scales.x.getPixelForTick(pluginOptions.targetIndex);
+                    if (!Number.isFinite(x)) return;
+
+                    const tolerance = Number.isFinite(pluginOptions.hoverTolerance) ? pluginOptions.hoverTolerance : 6;
+                    const withinX = Math.abs(event.x - x) <= tolerance;
+                    const withinY = event.y >= chartArea.top && event.y <= chartArea.bottom;
+                    const isHover = withinX && withinY;
+
+                    if (chart.$targetLineHover !== isHover) {
+                        chart.$targetLineHover = isHover;
+                        chart.draw();
+                    }
+                },
+                afterDatasetsDraw(chart, args, pluginOptions) {
+                    const { chartArea, scales } = chart;
+                    if (!chartArea || !scales?.x) return;
+                    if (!Number.isFinite(pluginOptions?.targetIndex)) return;
+
+                    const x = scales.x.getPixelForTick(pluginOptions.targetIndex);
+                    if (!Number.isFinite(x)) return;
+
+                    const { ctx } = chart;
+                    ctx.save();
+                    ctx.strokeStyle = pluginOptions.color || '#ef4444';
+                    ctx.lineWidth = 2;
+                    ctx.setLineDash([6, 4]);
+                    ctx.beginPath();
+                    ctx.moveTo(x, chartArea.top);
+                    ctx.lineTo(x, chartArea.bottom);
+                    ctx.stroke();
+                    ctx.restore();
+
+                    if (!chart.$targetLineHover || !pluginOptions?.label) return;
+
+                    const label = String(pluginOptions.label);
+                    const paddingX = 6;
+                    const paddingY = 4;
+                    ctx.save();
+                    ctx.font = '12px -apple-system, BlinkMacSystemFont, \"Segoe UI\", Roboto, sans-serif';
+                    ctx.textBaseline = 'middle';
+                    const textWidth = ctx.measureText(label).width;
+                    const boxWidth = textWidth + paddingX * 2;
+                    const boxHeight = 12 + paddingY * 2;
+                    let boxX = x - (boxWidth / 2);
+                    const boxY = chartArea.top + 6;
+
+                    if (boxX < chartArea.left) boxX = chartArea.left;
+                    if (boxX + boxWidth > chartArea.right) boxX = chartArea.right - boxWidth;
+
+                    ctx.fillStyle = pluginOptions.backgroundColor || 'rgba(17, 24, 39, 0.92)';
+                    ctx.strokeStyle = pluginOptions.color || '#ef4444';
+                    ctx.lineWidth = 1;
+                    ctx.beginPath();
+                    ctx.rect(boxX, boxY, boxWidth, boxHeight);
+                    ctx.fill();
+                    ctx.stroke();
+
+                    ctx.fillStyle = pluginOptions.labelColor || '#fecaca';
+                    ctx.fillText(label, boxX + paddingX, boxY + (boxHeight / 2));
+                    ctx.restore();
+                },
+            };
 
             chart = new Chart(ctx, {
                 type: 'line',
+                plugins: [targetLinePlugin],
                 data: {
                     labels,
                     datasets: [
@@ -1289,6 +1410,13 @@
                     plugins: {
                         legend: {
                             labels: { color: 'white' },
+                        },
+                        targetLine: {
+                            targetIndex,
+                            color: '#ef4444',
+                            label: targetLabelText,
+                            labelColor: '#fecaca',
+                            hoverTolerance: 6,
                         },
                     },
                     scales: {
@@ -1338,7 +1466,8 @@
                 ? purchaseAmount
                 : ((Number.isFinite(fxRate) && fxRate > 0) ? purchaseAmount * fxRate : NaN);
 
-            el.requiredAmount.textContent = formatAmount(purchaseAmount, 2);
+            const amountDigits = isLocalCurrency(selectedProduct.currency) ? 0 : 2;
+            el.requiredAmount.textContent = formatAmount(purchaseAmount, amountDigits);
             el.requiredKrw.textContent = Number.isFinite(purchaseKrw) ? formatKrw(purchaseKrw) : '0';
             el.calculationFormula.textContent = getCalculationFormula(selectedProduct, quoteValue);
 
