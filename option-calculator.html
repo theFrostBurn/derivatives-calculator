@@ -146,6 +146,12 @@
             font-size: 0.875rem;
         }
 
+        .deposit-note {
+            margin-left: 0.5rem;
+            font-size: 0.75rem;
+            color: #fbbf24;
+        }
+
         details {
             border: 1px solid #374151;
             border-radius: 0.5rem;
@@ -244,7 +250,7 @@
 
                 <div class="results">
                     <div class="result-item"><strong>계산식:</strong> <span id="calculationFormula">-</span></div>
-                    <div class="result-item"><strong>1계약 필요금액:</strong> <span id="requiredAmount">0</span> <span id="requiredCurrency">USD</span></div>
+                    <div class="result-item"><strong>1계약 필요금액:</strong> <span id="requiredAmount">0</span> <span id="requiredCurrency">USD</span><span id="depositNote" class="deposit-note" style="display: none;">한국시장 옵션 기본예탁금 1,000만원(현금) 필요</span></div>
                     <div class="result-item"><strong>원화 환산 금액:</strong> &#8361; <span id="requiredKrw" class="krw-strong">0</span></div>
                 </div>
 
@@ -640,7 +646,7 @@
                 assetClass: '농산물',
                 name: '대두(콩)',
                 id: 'OZM_SOYBEAN',
-                code: 'OZM',
+                code: 'OZS',
                 multiplierText: '50 USD',
                 note: '센트/부셸',
                 currency: 'USD',
@@ -683,14 +689,7 @@
         const STORAGE = {
             selectedProductId: 'optionCalculator.selectedProductId',
             selectedProductCode: 'optionCalculator.selectedProductCode',
-            defaultsFeePerContract: 'optionCalculator.defaults.feePerContract',
             defaultsProfitPercentage: 'optionCalculator.defaults.profitPercentage',
-            fxRateUSD: 'optionCalculator.fx.USD',
-            fxRateUSD_ts: 'optionCalculator.fx.USD.ts',
-            fxRateUSD_source: 'optionCalculator.fx.USD.source',
-            fxRateHKD: 'optionCalculator.fx.HKD',
-            fxRateHKD_ts: 'optionCalculator.fx.HKD.ts',
-            fxRateHKD_source: 'optionCalculator.fx.HKD.source',
         };
 
         const FX_CACHE_TTL_MS = 6 * 60 * 60 * 1000;
@@ -702,6 +701,13 @@
         };
 
         const LOCAL_CURRENCY = 'KRW';
+        const SAMSUNG_FEE_PRODUCTS = new Set([
+            'KOSPI200',
+            'KOSPI200_MINI',
+            'KOSDAQ150',
+            'KR_STOCK',
+        ]);
+        const FX_MEMORY = {};
 
         const el = {
             productSelect: document.getElementById('productSelect'),
@@ -723,6 +729,7 @@
             requiredAmount: document.getElementById('requiredAmount'),
             requiredCurrency: document.getElementById('requiredCurrency'),
             requiredKrw: document.getElementById('requiredKrw'),
+            depositNote: document.getElementById('depositNote'),
             calculationFormula: document.getElementById('calculationFormula'),
             feePerContract: document.getElementById('feePerContract'),
             feePerContractCurrency: document.getElementById('feePerContractCurrency'),
@@ -769,9 +776,8 @@
             return `optionCalculator.defaults.quotePrice.${productKey}`;
         }
 
-        function applySavedDefaults() {
-            const pp = Number(safeGetItem(STORAGE.defaultsProfitPercentage));
-            if (Number.isFinite(pp) && pp >= 0) el.profitPercentage.value = String(pp);
+        function getProfitDefaultKey(productKey) {
+            return `optionCalculator.defaults.profitPercentage.${productKey}`;
         }
 
         function applySavedQuoteForProduct(productKey) {
@@ -779,19 +785,30 @@
             if (raw && String(raw).trim()) el.quotePrice.value = String(raw);
         }
 
+        function applySavedProfitForProduct(productKey) {
+            const perProductRaw = safeGetItem(getProfitDefaultKey(productKey));
+            const perProductValue = Number(perProductRaw);
+            if (Number.isFinite(perProductValue) && perProductValue >= 0) {
+                el.profitPercentage.value = String(perProductValue);
+                return;
+            }
+
+            const legacyRaw = safeGetItem(STORAGE.defaultsProfitPercentage);
+            const legacyValue = Number(legacyRaw);
+            if (Number.isFinite(legacyValue) && legacyValue >= 0) {
+                el.profitPercentage.value = String(legacyValue);
+            }
+        }
+
         function saveCurrentAsDefaults() {
             if (!selectedProduct) return;
-
-            const currency = selectedProduct.currency;
-            const fxRate = Number(el.fxRate.value);
-            if (Number.isFinite(fxRate) && fxRate > 0) setFxRateForCurrency(currency, fxRate, 'manual');
 
             const quoteRaw = String(el.quotePrice.value ?? '').trim();
             const selectedKey = selectedProduct.id ?? selectedProduct.code;
             if (quoteRaw) safeSetItem(getQuoteDefaultKey(selectedKey), quoteRaw);
 
             const pp = Number(el.profitPercentage.value);
-            if (Number.isFinite(pp) && pp >= 0) safeSetItem(STORAGE.defaultsProfitPercentage, String(pp));
+            if (Number.isFinite(pp) && pp >= 0) safeSetItem(getProfitDefaultKey(selectedKey), String(pp));
 
             safeSetItem(STORAGE.selectedProductId, selectedKey);
             safeSetItem(STORAGE.selectedProductCode, selectedProduct.code);
@@ -935,7 +952,41 @@
             return Number.isFinite(num) ? num : NaN;
         }
 
+        function getSamsungFeePolicy(product) {
+            const key = product?.id ?? product?.code;
+            if (!SAMSUNG_FEE_PRODUCTS.has(key)) return null;
+
+            const now = new Date();
+            const year = now.getFullYear();
+            const month = now.getMonth() + 1;
+
+            if (year === 2026 && month >= 1 && month <= 3) {
+                return {
+                    type: 'percent',
+                    rate: 0.012654,
+                    label: '0.012654 % (삼성증권 이벤트 수수료 - 2026년 1~3월)',
+                };
+            }
+
+            if (year === 2026 && month >= 4 && month <= 6) {
+                return {
+                    type: 'percent',
+                    rate: 0.019658461,
+                    label: '0.019658461 % (삼성증권 이벤트 수수료 - 2026년 4~6월)',
+                };
+            }
+
+            return {
+                type: 'percent',
+                rate: 0.15,
+                label: '0.15 % (삼성증권 기본 수수료)',
+            };
+        }
+
         function getFeePolicy(product) {
+            const samsungPolicy = getSamsungFeePolicy(product);
+            if (samsungPolicy) return samsungPolicy;
+
             const policy = product?.feePolicy;
             if (policy?.type === 'percent') {
                 const rate = Number(policy.rate);
@@ -966,22 +1017,15 @@
             };
         }
 
-        function getFxStorageKey(currency) {
-            if (isLocalCurrency(currency)) return null;
-            if (currency === 'HKD') return STORAGE.fxRateHKD;
-            return STORAGE.fxRateUSD;
-        }
-
-        function getFxTimestampKey(currency) {
-            if (isLocalCurrency(currency)) return null;
-            if (currency === 'HKD') return STORAGE.fxRateHKD_ts;
-            return STORAGE.fxRateUSD_ts;
-        }
-
-        function getFxSourceKey(currency) {
-            if (isLocalCurrency(currency)) return null;
-            if (currency === 'HKD') return STORAGE.fxRateHKD_source;
-            return STORAGE.fxRateUSD_source;
+        function getFxMemory(currency) {
+            if (!FX_MEMORY[currency]) {
+                FX_MEMORY[currency] = {
+                    rate: null,
+                    ts: null,
+                    source: '',
+                };
+            }
+            return FX_MEMORY[currency];
         }
 
         function getFxStoredInfo(currency) {
@@ -989,18 +1033,10 @@
                 return { rate: 1, ts: null, source: '' };
             }
 
-            const rateKey = getFxStorageKey(currency);
-            const tsKey = getFxTimestampKey(currency);
-            const sourceKey = getFxSourceKey(currency);
-
-            if (!rateKey || !tsKey || !sourceKey) {
-                return { rate: null, ts: null, source: '' };
-            }
-
-            const rate = Number(safeGetItem(rateKey));
-            const ts = Number(safeGetItem(tsKey));
-            const source = safeGetItem(sourceKey) || '';
-
+            const memory = getFxMemory(currency);
+            const rate = Number(memory.rate);
+            const ts = Number(memory.ts);
+            const source = memory.source || '';
             return {
                 rate: Number.isFinite(rate) && rate > 0 ? rate : null,
                 ts: Number.isFinite(ts) && ts > 0 ? ts : null,
@@ -1010,24 +1046,17 @@
 
         function getFxRateForCurrency(currency) {
             if (isLocalCurrency(currency)) return 1;
-            const key = getFxStorageKey(currency);
-            if (!key) return DEFAULT_FX[currency] ?? DEFAULT_FX.USD;
-            const saved = safeGetItem(key);
-            const parsed = Number(saved);
-            if (Number.isFinite(parsed) && parsed > 0) return parsed;
+            const info = getFxStoredInfo(currency);
+            if (info.rate) return info.rate;
             return DEFAULT_FX[currency] ?? DEFAULT_FX.USD;
         }
 
         function setFxRateForCurrency(currency, rate, source = 'manual') {
-            const rateKey = getFxStorageKey(currency);
-            const tsKey = getFxTimestampKey(currency);
-            const sourceKey = getFxSourceKey(currency);
-
-            if (!rateKey || !tsKey || !sourceKey) return;
-
-            safeSetItem(rateKey, String(rate));
-            safeSetItem(tsKey, String(Date.now()));
-            safeSetItem(sourceKey, String(source));
+            if (isLocalCurrency(currency)) return;
+            const memory = getFxMemory(currency);
+            memory.rate = rate;
+            memory.ts = Date.now();
+            memory.source = String(source);
         }
 
         function buildProductSelect() {
@@ -1098,6 +1127,10 @@
 
             el.requiredCurrency.textContent = currencyLabel;
             if (el.feePerContractCurrency) el.feePerContractCurrency.textContent = currencyLabel;
+            if (el.depositNote) {
+                const key = product.id ?? product.code;
+                el.depositNote.style.display = SAMSUNG_FEE_PRODUCTS.has(key) ? 'inline' : 'none';
+            }
 
             safeSetItem(STORAGE.selectedProductId, product.id ?? product.code);
             safeSetItem(STORAGE.selectedProductCode, product.code);
@@ -1269,7 +1302,8 @@
                 return `${formatAmount(quoteValue, product.displayDecimals)} × ${formatCurrencyValue(v, currency, 0)} = ${formatCurrencyValue(quoteValue * v, currency, amountDigits)}`;
             }
 
-            return `${formatAmount(quoteValue, product.displayDecimals)} × ${formatAmount(v, 0)} = ${formatCurrencyValue(quoteValue * v, currency, amountDigits)}`;
+            const vDigits = Number.isInteger(v) ? 0 : 2;
+            return `${formatAmount(quoteValue, product.displayDecimals)} × ${formatAmount(v, vDigits)} = ${formatCurrencyValue(quoteValue * v, currency, amountDigits)}`;
         }
 
         function updateChart(buyPrice, product, totalFee, targetProfitPrice) {
@@ -1522,7 +1556,6 @@
 
         function bootstrap() {
             buildProductSelect();
-            applySavedDefaults();
 
             const savedId = safeGetItem(STORAGE.selectedProductId);
             const savedCode = safeGetItem(STORAGE.selectedProductCode);
@@ -1531,12 +1564,14 @@
             el.productSelect.value = initialProduct.id ?? initialProduct.code;
             updateProductUI(initialProduct);
             applySavedQuoteForProduct(initialProduct.id ?? initialProduct.code);
+            applySavedProfitForProduct(initialProduct.id ?? initialProduct.code);
 
             el.productSelect.addEventListener('change', () => {
                 const product = getProductByCode(el.productSelect.value);
                 updateProductUI(product);
                 applySavedQuoteForProduct(product.id ?? product.code);
-                fetchAndApplyFxRate(false);
+                applySavedProfitForProduct(product.id ?? product.code);
+                fetchAndApplyFxRate(true);
                 recalculate();
             });
 
@@ -1554,7 +1589,7 @@
 
             resetResults();
             recalculate();
-            fetchAndApplyFxRate(false);
+            fetchAndApplyFxRate(true);
         }
 
         bootstrap();
