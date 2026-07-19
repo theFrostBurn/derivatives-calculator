@@ -44,6 +44,69 @@
             color: #9ca3af;
         }
 
+        .calendar-critical {
+            position: sticky;
+            top: 0;
+            z-index: 100;
+            overflow: hidden;
+            border-top: 1px solid #f87171;
+            border-bottom: 1px solid #f87171;
+            padding: 1rem 1.5rem 1rem 1.75rem;
+            background:
+                linear-gradient(90deg, rgba(127, 29, 29, 0.97), rgba(69, 10, 10, 0.98)),
+                #450a0a;
+            box-shadow: 0 12px 30px rgba(0, 0, 0, 0.38);
+        }
+
+        .calendar-critical[hidden] {
+            display: none;
+        }
+
+        .calendar-critical::before {
+            content: '';
+            position: absolute;
+            inset: 0 0 auto;
+            height: 0.3rem;
+            background: repeating-linear-gradient(
+                135deg,
+                #fca5a5 0,
+                #fca5a5 0.55rem,
+                #7f1d1d 0.55rem,
+                #7f1d1d 1.1rem
+            );
+        }
+
+        .calendar-critical-heading {
+            display: flex;
+            align-items: center;
+            gap: 0.625rem;
+            color: #fff7ed;
+            font-size: 0.9375rem;
+            font-weight: 850;
+            letter-spacing: -0.01em;
+        }
+
+        .calendar-critical-mark {
+            display: inline-grid;
+            flex: 0 0 auto;
+            width: 1.45rem;
+            height: 1.45rem;
+            place-items: center;
+            border: 2px solid #fecaca;
+            border-radius: 50%;
+            color: #fff;
+            font-size: 0.8rem;
+            line-height: 1;
+        }
+
+        .calendar-critical-body {
+            margin-top: 0.45rem;
+            color: #fee2e2;
+            font-size: 0.78rem;
+            font-weight: 620;
+            line-height: 1.55;
+        }
+
         .content {
             display: flex;
             padding: 1.5rem;
@@ -307,6 +370,13 @@
             font-variant-numeric: tabular-nums;
         }
 
+        .expiry-calendar-status {
+            margin-bottom: 0.35rem;
+            color: #fcd34d;
+            font-weight: 700;
+            font-variant-numeric: tabular-nums;
+        }
+
         .expiry-source {
             color: #c7d2fe;
             text-decoration: underline;
@@ -350,6 +420,10 @@
         }
 
         @media (max-width: 430px) {
+            .calendar-critical {
+                padding: 0.9rem 1rem 0.9rem 1.125rem;
+            }
+
             .expiry-grid {
                 grid-template-columns: 1fr;
             }
@@ -362,6 +436,21 @@
             <h1 class="title">옵션 승수 기반 최소구입금액 계산기</h1>
             <div class="subtitle">종목별 승수·단위 자동 적용 (1계약 기준)</div>
         </div>
+
+        <aside
+            class="calendar-critical"
+            id="calendarCriticalAlert"
+            role="alert"
+            aria-live="assertive"
+            aria-atomic="true"
+            hidden
+        >
+            <div class="calendar-critical-heading">
+                <span class="calendar-critical-mark" aria-hidden="true">!</span>
+                <span id="calendarCriticalTitle">거래 달력 갱신 필요</span>
+            </div>
+            <p class="calendar-critical-body" id="calendarCriticalBody"></p>
+        </aside>
 
         <div class="content">
             <div class="form-section">
@@ -400,6 +489,7 @@
                             <span class="expiry-reference-primary" id="expiryAsOf"></span>
                             <span class="expiry-reference-market" id="expiryMarketAsOf" hidden></span>
                         </div>
+                        <div class="expiry-calendar-status" id="expiryCalendarStatus"></div>
                         <span id="expiryNote"></span>
                         <a class="expiry-source" id="expirySource" href="#" target="_blank" rel="noopener noreferrer">공식 규칙</a>
                     </div>
@@ -896,6 +986,34 @@
         const DAY_MS = 24 * 60 * 60 * 1000;
         const KOREA_TIME_ZONE = 'Asia/Seoul';
         const WEEKDAY_LABELS = ['일', '월', '화', '수', '목', '금', '토'];
+        const CALENDAR_EMBEDDED_THROUGH = '2028-12-31';
+        const CALENDAR_WARNING_LEAD_MONTHS = 2;
+        const CALENDAR_PROFILES = Object.freeze({
+            CME_GROUP: Object.freeze({
+                label: 'CME·CBOT·COMEX·NYMEX',
+                officialThrough: '2026-12-31',
+                embeddedThrough: CALENDAR_EMBEDDED_THROUGH,
+                sourceUrl: 'https://www.cmegroup.com/trading-hours.html',
+            }),
+            US_OPTIONS: Object.freeze({
+                label: '미국 주식옵션 공통',
+                officialThrough: '2027-12-31',
+                embeddedThrough: CALENDAR_EMBEDDED_THROUGH,
+                sourceUrl: 'https://www.optionseducation.org/referencelibrary/expiration-calendar',
+            }),
+            KRX: Object.freeze({
+                label: 'KRX',
+                officialThrough: '2026-12-31',
+                embeddedThrough: CALENDAR_EMBEDDED_THROUGH,
+                sourceUrl: 'https://global.krx.co.kr/contents/GLB/05/0501/0501110000/GLB0501110000.jsp',
+            }),
+            HKEX: Object.freeze({
+                label: 'HKEX',
+                officialThrough: '2027-12-31',
+                embeddedThrough: CALENDAR_EMBEDDED_THROUGH,
+                sourceUrl: 'https://www.hkex.com.hk/-/media/HKEX-Market/Services/Circulars-and-Notices/Participant-and-Members-Circulars/HKFE/2026/MO_DT_134_26_e.pdf',
+            }),
+        });
 
         function makeYmd(year, month, day) {
             return { year, month, day };
@@ -984,10 +1102,38 @@
             return makeYmd(year, month, day);
         }
 
-        const US_HOLIDAY_CACHE = new Map();
+        // 미국 주식옵션은 NYSE가 공시한 2026~2028 휴장일을 내장합니다.
+        // US_STOCK은 거래소 미지정 공통 상품이므로 2028년은 OCC/Cboe/Nasdaq 공통 확정이 아닌 예상으로 남깁니다.
+        const US_STOCK_OPTION_HOLIDAYS = new Set([
+            '2026-01-01', '2026-01-19', '2026-02-16', '2026-04-03', '2026-05-25',
+            '2026-06-19', '2026-07-03', '2026-09-07', '2026-11-26', '2026-12-25',
+            '2027-01-01', '2027-01-18', '2027-02-15', '2027-03-26', '2027-05-31',
+            '2027-06-18', '2027-07-05', '2027-09-06', '2027-11-25', '2027-12-24',
+            '2028-01-17', '2028-02-21', '2028-04-14', '2028-05-29', '2028-06-19',
+            '2028-07-04', '2028-09-04', '2028-11-23', '2028-12-25',
+        ]);
 
-        function getUsMarketHolidays(year) {
-            if (US_HOLIDAY_CACHE.has(year)) return US_HOLIDAY_CACHE.get(year);
+        // CME Group은 2026 공개 일정과 같은 휴일 규칙으로 2027~2028 일반 영업일 제외일을 미리 계산해 내장합니다.
+        // 실제 만기 처리는 상품군별로 다를 수 있으며, 2027~2028은 CALENDAR_PROFILES에서 예상으로 구분합니다.
+        const CME_GROUP_GENERAL_BUSINESS_DAY_EXCLUSIONS = new Set([
+            '2026-01-01', '2026-01-19', '2026-02-16', '2026-04-03', '2026-05-25',
+            '2026-06-19', '2026-07-03', '2026-09-07', '2026-11-26', '2026-12-25',
+            '2027-01-01', '2027-01-18', '2027-02-15', '2027-03-26', '2027-05-31',
+            '2027-06-18', '2027-07-05', '2027-09-06', '2027-11-25', '2027-12-24',
+            '2028-01-17', '2028-02-21', '2028-04-14', '2028-05-29', '2028-06-19',
+            '2028-07-04', '2028-09-04', '2028-11-23', '2028-12-25',
+        ]);
+
+        // CME Clearing의 2026-04-03 특별 공지상 FX·금리 만기 옵션은 이날 정상 처리됩니다.
+        // 다음 연도까지 반복되는 규칙이 아니므로 명시된 날짜에만 예외를 적용합니다.
+        const CME_FX_INTEREST_EXPIRY_PROCESSING_DAYS = new Set([
+            '2026-04-03',
+        ]);
+
+        const US_RECURRING_HOLIDAY_CACHE = new Map();
+
+        function getRecurringUsMarketHolidays(year) {
+            if (US_RECURRING_HOLIDAY_CACHE.has(year)) return US_RECURRING_HOLIDAY_CACHE.get(year);
 
             const keys = new Set();
             const add = (date) => keys.add(ymdKey(date));
@@ -1005,7 +1151,7 @@
             const nextNewYearObserved = observedFixedHoliday(year + 1, 1, 1);
             if (nextNewYearObserved.year === year) add(nextNewYearObserved);
 
-            US_HOLIDAY_CACHE.set(year, keys);
+            US_RECURRING_HOLIDAY_CACHE.set(year, keys);
             return keys;
         }
 
@@ -1015,21 +1161,30 @@
             '2026-07-17', '2026-08-17', '2026-09-24', '2026-09-25', '2026-09-26',
             '2026-10-05', '2026-10-09', '2026-12-25', '2026-12-31',
             '2027-01-01', '2027-02-06', '2027-02-07', '2027-02-08', '2027-02-09',
-            '2027-03-01', '2027-05-01', '2027-05-05', '2027-05-13', '2027-06-06',
-            '2027-07-17', '2027-08-16', '2027-09-14', '2027-09-15', '2027-09-16',
+            '2027-03-01', '2027-05-01', '2027-05-03', '2027-05-05', '2027-05-13',
+            '2027-06-06', '2027-07-17', '2027-07-19', '2027-08-16',
+            '2027-09-14', '2027-09-15', '2027-09-16',
             '2027-10-04', '2027-10-11', '2027-12-27', '2027-12-31',
+            '2028-01-01', '2028-01-26', '2028-01-27', '2028-01-28', '2028-03-01',
+            '2028-04-12', '2028-05-01', '2028-05-02', '2028-05-05', '2028-06-06',
+            '2028-07-17', '2028-08-15', '2028-10-02', '2028-10-03', '2028-10-04',
+            '2028-10-05', '2028-10-09', '2028-12-25', '2028-12-29',
         ]);
 
         const HKEX_HOLIDAYS = new Set([
             '2026-01-01', '2026-02-17', '2026-02-18', '2026-02-19', '2026-04-03',
             '2026-04-06', '2026-04-07', '2026-05-01', '2026-05-25', '2026-06-19',
-            '2026-07-01', '2026-09-28', '2026-10-01', '2026-10-19', '2026-12-25',
+            '2026-07-01', '2026-10-01', '2026-10-19', '2026-12-25',
             '2027-01-01', '2027-02-08', '2027-02-09', '2027-03-26', '2027-03-29',
             '2027-04-05', '2027-05-13', '2027-06-09', '2027-07-01', '2027-09-16',
             '2027-10-01', '2027-10-08', '2027-12-27',
+            '2028-01-01', '2028-01-26', '2028-01-27', '2028-01-28', '2028-04-04',
+            '2028-04-14', '2028-04-15', '2028-04-17', '2028-05-01', '2028-05-02',
+            '2028-05-29', '2028-07-01', '2028-10-01', '2028-10-02', '2028-10-04',
+            '2028-10-26', '2028-12-25', '2028-12-26',
         ]);
 
-        const HKEX_OFFICIAL_EXPIRIES_2026 = {
+        const HKEX_OFFICIAL_EXPIRIES = {
             '2026-01': '2026-01-29',
             '2026-02': '2026-02-26',
             '2026-03': '2026-03-30',
@@ -1042,11 +1197,56 @@
             '2026-10': '2026-10-29',
             '2026-11': '2026-11-27',
             '2026-12': '2026-12-30',
+            '2027-01': '2027-01-28',
+            '2027-02': '2027-02-25',
+            '2027-03': '2027-03-30',
+            '2027-04': '2027-04-29',
+            '2027-05': '2027-05-28',
+            '2027-06': '2027-06-29',
+            '2027-07': '2027-07-29',
+            '2027-08': '2027-08-30',
+            '2027-09': '2027-09-29',
+            '2027-10': '2027-10-28',
+            '2027-11': '2027-11-29',
+            '2027-12': '2027-12-30',
         };
 
         function parseYmdKey(key) {
             const [year, month, day] = key.split('-').map(Number);
             return makeYmd(year, month, day);
+        }
+
+        function getCalendarWarningStart(profile) {
+            const renewalRequiredOn = addCalendarDays(parseYmdKey(profile.officialThrough), 1);
+            return addCalendarMonths(renewalRequiredOn, -CALENDAR_WARNING_LEAD_MONTHS);
+        }
+
+        function getCalendarCoverageState(referenceDate) {
+            const affected = Object.entries(CALENDAR_PROFILES)
+                .map(([id, profile]) => {
+                    const officialThrough = parseYmdKey(profile.officialThrough);
+                    const warningStartsOn = getCalendarWarningStart(profile);
+                    let level = 'ok';
+                    if (compareYmd(referenceDate, officialThrough) > 0) level = 'expired';
+                    else if (compareYmd(referenceDate, warningStartsOn) >= 0) level = 'critical';
+                    return {
+                        id,
+                        label: profile.label,
+                        officialThrough: profile.officialThrough,
+                        embeddedThrough: profile.embeddedThrough,
+                        warningStartsOn: ymdKey(warningStartsOn),
+                        level,
+                    };
+                })
+                .filter((profile) => profile.level !== 'ok')
+                .sort((left, right) => left.officialThrough.localeCompare(right.officialThrough));
+
+            return {
+                level: affected.some((profile) => profile.level === 'expired')
+                    ? 'expired'
+                    : (affected.length ? 'critical' : 'ok'),
+                affected,
+            };
         }
 
         function isWeekend(date) {
@@ -1063,16 +1263,36 @@
         };
 
         function isUsVenueBusinessDay(date, venue) {
+            const key = ymdKey(date);
+            const hasEmbeddedCalendar = date.year >= 2026 && date.year <= 2028;
+            const embeddedHolidays = venue === 'US_STOCK'
+                ? US_STOCK_OPTION_HOLIDAYS
+                : CME_GROUP_GENERAL_BUSINESS_DAY_EXCLUSIONS;
+            const isHoliday = hasEmbeddedCalendar
+                ? embeddedHolidays.has(key)
+                : getRecurringUsMarketHolidays(date.year).has(key);
             return !isWeekend(date)
-                && !getUsMarketHolidays(date.year).has(ymdKey(date))
-                && !US_VENUE_EXTRA_CLOSURES[venue].has(ymdKey(date));
+                && !isHoliday
+                && !US_VENUE_EXTRA_CLOSURES[venue].has(key);
         }
 
         function isCmeBusinessDay(date) {
             return isUsVenueBusinessDay(date, 'CME');
         }
 
+        function isCmeFxExpiryBusinessDay(date) {
+            if (isWeekend(date)) return false;
+            if (CME_FX_INTEREST_EXPIRY_PROCESSING_DAYS.has(ymdKey(date))) return true;
+            return isUsVenueBusinessDay(date, 'CME');
+        }
+
         function isCbotBusinessDay(date) {
+            return isUsVenueBusinessDay(date, 'CBOT');
+        }
+
+        function isCbotInterestRateExpiryBusinessDay(date) {
+            if (isWeekend(date)) return false;
+            if (CME_FX_INTEREST_EXPIRY_PROCESSING_DAYS.has(ymdKey(date))) return true;
             return isUsVenueBusinessDay(date, 'CBOT');
         }
 
@@ -1148,7 +1368,7 @@
             const thirdWednesday = nthWeekdayOfMonth(contractMonth.year, contractMonth.month, 3, 3);
             const firstFridayBefore = previousWeekday(thirdWednesday, 5);
             const nominal = addCalendarDays(firstFridayBefore, -7);
-            return adjustToPreviousBusinessDay(nominal, isCmeBusinessDay);
+            return adjustToPreviousBusinessDay(nominal, isCmeFxExpiryBusinessDay);
         }
 
         function calculateLastEligibleFridayExpiry(contractMonth) {
@@ -1165,19 +1385,31 @@
 
         function calculateTreasuryMonthlyExpiry(contractMonth) {
             const previousMonth = addCalendarMonths(makeYmd(contractMonth.year, contractMonth.month, 1), -1);
-            const lastBusinessDay = lastBusinessDayOfMonth(previousMonth.year, previousMonth.month, isCbotBusinessDay);
+            const lastBusinessDay = lastBusinessDayOfMonth(
+                previousMonth.year,
+                previousMonth.month,
+                isCbotInterestRateExpiryBusinessDay,
+            );
             let friday = makeYmd(previousMonth.year, previousMonth.month, daysInMonth(previousMonth.year, previousMonth.month));
             while (dayOfWeek(friday) !== 5) friday = addCalendarDays(friday, -1);
 
-            const businessDaysAfterFriday = countBusinessDaysAfter(friday, lastBusinessDay, isCbotBusinessDay);
-            if (!isCbotBusinessDay(friday) && businessDaysAfterFriday === 1) {
-                return previousBusinessDay(friday, isCbotBusinessDay);
+            const businessDaysAfterFriday = countBusinessDaysAfter(
+                friday,
+                lastBusinessDay,
+                isCbotInterestRateExpiryBusinessDay,
+            );
+            if (!isCbotInterestRateExpiryBusinessDay(friday) && businessDaysAfterFriday === 1) {
+                return previousBusinessDay(friday, isCbotInterestRateExpiryBusinessDay);
             }
 
-            while (countBusinessDaysAfter(friday, lastBusinessDay, isCbotBusinessDay) < 2) {
+            while (countBusinessDaysAfter(
+                friday,
+                lastBusinessDay,
+                isCbotInterestRateExpiryBusinessDay,
+            ) < 2) {
                 friday = addCalendarDays(friday, -7);
             }
-            return adjustToPreviousBusinessDay(friday, isCbotBusinessDay);
+            return adjustToPreviousBusinessDay(friday, isCbotInterestRateExpiryBusinessDay);
         }
 
         function calculateThirdFridayExpiry(contractMonth, isBusinessDay = isCmeBusinessDay) {
@@ -1192,9 +1424,9 @@
 
         function calculateHkexExpiry(contractMonth) {
             const monthKey = `${contractMonth.year}-${String(contractMonth.month).padStart(2, '0')}`;
-            if (HKEX_OFFICIAL_EXPIRIES_2026[monthKey]) {
+            if (HKEX_OFFICIAL_EXPIRIES[monthKey]) {
                 return {
-                    expiryDate: parseYmdKey(HKEX_OFFICIAL_EXPIRIES_2026[monthKey]),
+                    expiryDate: parseYmdKey(HKEX_OFFICIAL_EXPIRIES[monthKey]),
                     official: true,
                 };
             }
@@ -1285,12 +1517,11 @@
             return candidates;
         }
 
-        const US_CALENDAR_VERIFIED_THROUGH = '2026-12-31';
-
         const EXPIRY_RULES = {
             cmeFxMonthly: {
                 venue: 'CME',
                 timeZone: 'America/Chicago',
+                calendarProfileId: 'CME_GROUP',
                 seriesLabel: '표준 월물',
                 ruleLabel: '매월 · 결제월 셋째 수요일 직전의 두 번째 금요일',
                 sourceUrl: 'https://www.cmegroup.com/content/dam/cmegroup/rulebook/CME/III/250/261A/261A.pdf',
@@ -1299,12 +1530,12 @@
                     OGBU: 'https://www.cmegroup.com/content/dam/cmegroup/rulebook/CME/III/250/251A/251A.pdf',
                     OJPU: 'https://www.cmegroup.com/content/dam/cmegroup/rulebook/CME/III/250/253A/253A.pdf',
                 },
-                calendarVerifiedThrough: US_CALENDAR_VERIFIED_THROUGH,
                 generate: (referenceDate) => generateMonthlyCandidates(referenceDate, calculateCmeFxExpiry),
             },
             cbotTreasuryMonthly: {
                 venue: 'CBOT',
                 timeZone: 'America/Chicago',
+                calendarProfileId: 'CME_GROUP',
                 seriesLabel: '표준 월물',
                 ruleLabel: '매월 · 명목월 전월, 월말보다 2영업일 이상 앞선 마지막 금요일(휴일 예외 적용)',
                 sourceUrl: 'https://www.cmegroup.com/content/dam/cmegroup/rulebook/CBOT/II/18A.pdf',
@@ -1313,42 +1544,42 @@
                     OZF: 'https://www.cmegroup.com/content/dam/cmegroup/rulebook/CBOT/II/20A.pdf',
                     OZN: 'https://www.cmegroup.com/content/dam/cmegroup/rulebook/CBOT/II/19A.pdf',
                 },
-                calendarVerifiedThrough: US_CALENDAR_VERIFIED_THROUGH,
                 generate: (referenceDate) => generateMonthlyCandidates(referenceDate, calculateTreasuryMonthlyExpiry),
             },
             cmeEquityQuarterly: {
                 venue: 'CME',
                 timeZone: 'America/Chicago',
+                calendarProfileId: 'CME_GROUP',
                 seriesLabel: '표준 분기물',
                 ruleLabel: '3·6·9·12월물 · 셋째 금요일(휴장 시 앞당김)',
                 sourceUrl: 'https://www.cmegroup.com/daily_bulletin/current/Section47_E_Mini_S_And_P_500_Call_Options.pdf',
                 sourceUrls: {
                     ONQ: 'https://www.cmegroup.com/daily_bulletin/current/Section40_Nasdaq_100_And_E_Mini_Nasdaq_100_Options.pdf',
                 },
-                calendarVerifiedThrough: US_CALENDAR_VERIFIED_THROUGH,
                 generate: generateQuarterlyCandidates,
             },
             cmeEquityWeekly14: {
                 venue: 'CME',
                 timeZone: 'America/Chicago',
+                calendarProfileId: 'CME_GROUP',
                 seriesLabel: '금요일 주간물',
                 ruleLabel: '매월 1~4주차 금요일 · 5주차/EOM은 별도 상품',
                 sourceUrl: 'https://www.cmegroup.com/daily_bulletin/current/Section47_E_Mini_S_And_P_500_Call_Options.pdf',
-                calendarVerifiedThrough: US_CALENDAR_VERIFIED_THROUGH,
                 generate: generateWeeklyOneToFourCandidates,
             },
             hkexIndexMonthly: {
                 venue: 'HKEX',
                 timeZone: 'Asia/Hong_Kong',
+                calendarProfileId: 'HKEX',
                 seriesLabel: '표준 월물',
                 ruleLabel: '매월 · 해당 월의 두 번째 마지막 거래일',
                 sourceUrl: 'https://www.hkex.com.hk/services/trading/derivatives/overview/trading-calendar-and-holiday-schedule?sc_lang=en',
-                calendarVerifiedThrough: '2027-12-31',
                 generate: generateHkexCandidates,
             },
             krxEquityMonthly: {
                 venue: 'KRX',
                 timeZone: 'Asia/Seoul',
+                calendarProfileId: 'KRX',
                 seriesLabel: '표준 월물',
                 ruleLabel: '매월 · 둘째 목요일(휴장 시 직전 거래일)',
                 sourceUrl: 'https://open.krx.co.kr/contents/OPN/01/01040202/OPN01040202.jsp',
@@ -1357,17 +1588,16 @@
                     KOSDAQ150: 'https://open.krx.co.kr/contents/OPN/01/01040210/OPN01040210.jsp',
                     KR_STOCK: 'https://open.krx.co.kr/contents/OPN/01/01040402/OPN01040402T1.jsp',
                 },
-                calendarVerifiedThrough: '2027-12-31',
                 generate: (referenceDate) => generateMonthlyCandidates(referenceDate, calculateKrxExpiry),
             },
             usStockMonthly: {
                 venue: '미국 시장',
                 timeZone: 'America/New_York',
+                calendarProfileId: 'US_OPTIONS',
                 seriesLabel: '정규 월물',
                 ruleLabel: '정규 월물 · 매월 셋째 금요일(휴장 시 앞당김)',
                 sourceUrl: 'https://www.samsungpop.com/ux/kor/trading/foreignOption/guide/usaOptionInfo.do',
                 sourceLabel: '삼성증권 공식 안내',
-                calendarVerifiedThrough: US_CALENDAR_VERIFIED_THROUGH,
                 note: '기초종목별 위클리 상장 여부가 달라 정규 월물만 표시합니다. ',
                 generate: (referenceDate) => generateMonthlyCandidates(
                     referenceDate,
@@ -1377,33 +1607,34 @@
             comexMetalsMonthly: {
                 venue: 'COMEX',
                 timeZone: 'America/New_York',
+                calendarProfileId: 'CME_GROUP',
                 seriesLabel: '표준 월물',
                 ruleLabel: '매월 · 명목월 전월의 뒤에서 네 번째 영업일',
                 sourceUrl: 'https://www.cmegroup.com/daily_bulletin/current/Section64_Metals_Option_Products.pdf',
-                calendarVerifiedThrough: US_CALENDAR_VERIFIED_THROUGH,
                 generate: (referenceDate) => generateMonthlyCandidates(referenceDate, calculateComexMetalsExpiry),
             },
             nymexWtiMonthly: {
                 venue: 'NYMEX',
                 timeZone: 'America/New_York',
+                calendarProfileId: 'CME_GROUP',
                 seriesLabel: '표준 월물',
                 ruleLabel: '매월 · 기초 WTI 선물 최종거래일보다 3영업일 전',
                 sourceUrl: 'https://www.cmegroup.com/rulebook/NYMEX/3/310.pdf',
-                calendarVerifiedThrough: US_CALENDAR_VERIFIED_THROUGH,
                 generate: (referenceDate) => generateMonthlyCandidates(referenceDate, calculateWtiExpiry),
             },
             nymexGasMonthly: {
                 venue: 'NYMEX',
                 timeZone: 'America/New_York',
+                calendarProfileId: 'CME_GROUP',
                 seriesLabel: '표준 월물',
                 ruleLabel: '매월 · 기초 천연가스 선물 최종거래일의 직전 영업일',
                 sourceUrl: 'https://www.cmegroup.com/rulebook/NYMEX/3/370.pdf',
-                calendarVerifiedThrough: US_CALENDAR_VERIFIED_THROUGH,
                 generate: (referenceDate) => generateMonthlyCandidates(referenceDate, calculateNaturalGasExpiry),
             },
             cbotAgMonthly: {
                 venue: 'CBOT',
                 timeZone: 'America/Chicago',
+                calendarProfileId: 'CME_GROUP',
                 seriesLabel: '표준 월물',
                 ruleLabel: '매월 · 명목월 전월, 월말보다 2영업일 이상 앞선 마지막 금요일',
                 sourceUrl: 'https://www.cmegroup.com/content/dam/cmegroup/rulebook/CBOT/I/10A.pdf',
@@ -1412,7 +1643,6 @@
                     OZM_SOYMEAL: 'https://www.cmegroup.com/content/dam/cmegroup/rulebook/CBOT/II/13A/13A.pdf',
                     OZW: 'https://www.cmegroup.com/rulebook/CBOT/II/14A/14A.pdf',
                 },
-                calendarVerifiedThrough: US_CALENDAR_VERIFIED_THROUGH,
                 generate: (referenceDate) => generateMonthlyCandidates(referenceDate, calculateLastEligibleFridayExpiry),
             },
         };
@@ -1420,13 +1650,17 @@
         function getUpcomingExpiriesByRule(ruleId, referenceDate, count = 2) {
             const rule = EXPIRY_RULES[ruleId];
             if (!rule) return [];
+            const calendarProfile = CALENDAR_PROFILES[rule.calendarProfileId];
+            if (!calendarProfile) return [];
+            const officialThrough = parseYmdKey(calendarProfile.officialThrough);
+            const embeddedThrough = parseYmdKey(calendarProfile.embeddedThrough);
 
             const seen = new Set();
             return rule.generate(referenceDate)
                 .map((candidate) => ({
                     ...candidate,
-                    estimated: Boolean(rule.calendarVerifiedThrough)
-                        && compareYmd(candidate.expiryDate, parseYmdKey(rule.calendarVerifiedThrough)) > 0,
+                    estimated: compareYmd(candidate.expiryDate, officialThrough) > 0,
+                    beyondEmbeddedCalendar: compareYmd(candidate.expiryDate, embeddedThrough) > 0,
                 }))
                 .filter((candidate) => compareYmd(candidate.expiryDate, referenceDate) >= 0)
                 .sort((left, right) => compareYmd(left.expiryDate, right.expiryDate))
@@ -1494,6 +1728,9 @@
         const FX_MEMORY = {};
 
         const el = {
+            calendarCriticalAlert: document.getElementById('calendarCriticalAlert'),
+            calendarCriticalTitle: document.getElementById('calendarCriticalTitle'),
+            calendarCriticalBody: document.getElementById('calendarCriticalBody'),
             productSelect: document.getElementById('productSelect'),
             productMeta: document.getElementById('productMeta'),
             expirySeries: document.getElementById('expirySeries'),
@@ -1506,6 +1743,7 @@
             nextExpiryContract: document.getElementById('nextExpiryContract'),
             expiryAsOf: document.getElementById('expiryAsOf'),
             expiryMarketAsOf: document.getElementById('expiryMarketAsOf'),
+            expiryCalendarStatus: document.getElementById('expiryCalendarStatus'),
             expiryNote: document.getElementById('expiryNote'),
             expirySource: document.getElementById('expirySource'),
             productMultiplier: document.getElementById('productMultiplier'),
@@ -1547,6 +1785,7 @@
         let selectedProduct = null;
         let chart = null;
         let lastExpiryReferenceKey = '';
+        let lastCalendarAlertKey = '';
 
         function safeGetItem(key) {
             try {
@@ -1916,6 +2155,52 @@
                 : '';
         }
 
+        function updateCalendarCriticalAlert(now = new Date()) {
+            const koreaDateTime = getZonedDateTimeParts(KOREA_TIME_ZONE, now);
+            const koreaDate = getDateFromZonedParts(koreaDateTime);
+            const state = getCalendarCoverageState(koreaDate);
+            const alertKey = `${state.level}:` + state.affected
+                .map((profile) => `${profile.id}:${profile.level}`)
+                .join(',');
+            if (alertKey === lastCalendarAlertKey) return;
+            lastCalendarAlertKey = alertKey;
+
+            if (state.level === 'ok') {
+                el.calendarCriticalAlert.hidden = true;
+                el.calendarCriticalTitle.textContent = '';
+                el.calendarCriticalBody.textContent = '';
+                return;
+            }
+
+            const coverageText = state.affected
+                .map((profile) => `${profile.label} ${formatKoreanYmd(parseYmdKey(profile.officialThrough), false)}까지`)
+                .join(' · ');
+            const isExpired = state.level === 'expired';
+            el.calendarCriticalTitle.textContent = isExpired
+                ? '위험: 공식 거래 일정 공개 범위 만료'
+                : '중요: 거래 달력 갱신 필요';
+            el.calendarCriticalBody.textContent = `${coverageText} 공식 일정이 공개되어 있습니다. `
+                + (isExpired
+                    ? '공개 범위가 이미 만료되었습니다. '
+                    : `공개 범위 종료가 ${CALENDAR_WARNING_LEAD_MONTHS}개월 이내로 다가왔습니다. `)
+                + 'HTML에는 2028년까지 규칙 기반 예상 달력이 내장되어 있지만, '
+                + '거래소 공식 일정과 삼성증권 HTS를 반드시 다시 확인하세요. '
+                + '이 경고는 공식 달력을 갱신할 때까지 계속 표시됩니다.';
+            el.calendarCriticalAlert.hidden = false;
+        }
+
+        function updateExpiryCalendarStatus(rule) {
+            const profile = CALENDAR_PROFILES[rule.calendarProfileId];
+            if (!profile) {
+                el.expiryCalendarStatus.textContent = '달력 확인 범위를 찾을 수 없습니다.';
+                return;
+            }
+            el.expiryCalendarStatus.textContent = `내장 달력 ${formatKoreanYmd(parseYmdKey(profile.embeddedThrough), false)}까지 `
+                + `· 공식 일정 공개 ${formatKoreanYmd(parseYmdKey(profile.officialThrough), false)}까지 `
+                + '· 이후 규칙 기반 예상';
+            el.expiryCalendarStatus.title = `${profile.label} 달력 출처: ${profile.sourceUrl}`;
+        }
+
         function updateExpiryDdayElement(node, expiryDate, koreaDate, marketDate) {
             const label = formatExpiryDday(expiryDate, koreaDate, marketDate);
             node.textContent = label;
@@ -1925,9 +2210,11 @@
         }
 
         function formatExpiryContract(candidate) {
-            const status = candidate.estimated
-                ? '휴장일 미확정 · 예상'
-                : (candidate.official ? '공식 거래 일정' : '공식 규칙 계산');
+            const status = candidate.beyondEmbeddedCalendar
+                ? '내장 달력 범위 밖 · 예상'
+                : (candidate.estimated
+                    ? '공식 일정 미공개 · 규칙 기반 예상'
+                    : (candidate.official ? '공식 만기표 반영' : '공식 규정·공개 일정 계산'));
             if (candidate.weekNumber) {
                 return `${candidate.contractMonth.year}년 ${candidate.contractMonth.month}월 `
                     + `${candidate.weekNumber}주차 금요일물 · 거래소 옵션 최종거래일 · ${status}`;
@@ -1949,6 +2236,8 @@
             el.expiryAsOf.textContent = '';
             el.expiryMarketAsOf.textContent = '';
             el.expiryMarketAsOf.hidden = true;
+            el.expiryCalendarStatus.textContent = '';
+            el.expiryCalendarStatus.removeAttribute('title');
             el.expiryNote.textContent = '삼성증권 HTS 종목정보에서 실제 만기와 주문 마감을 확인하세요. ';
             el.expirySource.removeAttribute('href');
             el.expirySource.textContent = '공식 자료 없음';
@@ -1985,8 +2274,9 @@
                 el.nextExpiry.textContent = formatKoreanYmd(next.expiryDate);
                 el.nextExpiryContract.textContent = formatExpiryContract(next);
                 updateExpiryReferenceUI(rule, koreaDateTime, marketDate);
+                updateExpiryCalendarStatus(rule);
                 const estimateNote = nearest.estimated || next.estimated
-                    ? '휴장일 확정 범위를 넘어선 규칙 기반 예상일이므로 공식 일정을 다시 확인하세요. '
+                    ? '공식 거래 달력 확인 범위를 넘어선 규칙 기반 예상일이므로 공식 일정을 다시 확인하세요. '
                     : '';
                 el.expiryNote.textContent = `표시된 날짜는 ${rule.venue} 현지 옵션 최종거래일이며, `
                     + '가까운 만기는 해당 거래소의 당일을 포함해 판정합니다. '
@@ -2001,6 +2291,7 @@
         }
 
         function refreshExpiryUIIfDateChanged(now = new Date()) {
+            updateCalendarCriticalAlert(now);
             if (!selectedProduct) return;
             const rule = EXPIRY_RULES[selectedProduct.expiryRuleId];
             if (!rule) return;
@@ -2487,6 +2778,7 @@
         }
 
         function bootstrap() {
+            updateCalendarCriticalAlert();
             buildProductSelect();
 
             const savedId = safeGetItem(STORAGE.selectedProductId);

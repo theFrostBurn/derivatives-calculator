@@ -22,7 +22,9 @@ const context = vm.createContext({
 
 vm.runInContext(`${engineMatch[1]}
 this.expiryEngine = {
+    CALENDAR_PROFILES,
     EXPIRY_RULES,
+    calculateCmeFxExpiry,
     calculateComexMetalsExpiry,
     calculateHkexExpiry,
     calculateKrxExpiry,
@@ -32,9 +34,15 @@ this.expiryEngine = {
     calculateTreasuryMonthlyExpiry,
     calculateWtiExpiry,
     formatExpiryDday,
+    getCalendarCoverageState,
     getMarketDate,
     getUpcomingExpiriesByRule,
     getZonedDateTimeParts,
+    isCmeBusinessDay,
+    isCmeFxExpiryBusinessDay,
+    isCbotInterestRateExpiryBusinessDay,
+    isHkexBusinessDay,
+    isKrxBusinessDay,
     isUsStockBusinessDay,
     makeYmd,
     ymdKey,
@@ -84,6 +92,21 @@ test('26개 상품이 모두 등록된 공용 만기 규칙을 참조한다', ()
             `${product.id}의 만기 규칙 ${product.expiryRuleId}가 등록되어야 합니다.`,
         );
     }
+});
+
+test('모든 만기 규칙이 2028년 말까지 내장된 달력 프로필을 참조한다', () => {
+    for (const [ruleId, rule] of Object.entries(engine.EXPIRY_RULES)) {
+        const profile = engine.CALENDAR_PROFILES[rule.calendarProfileId];
+        assert.ok(profile, `${ruleId}의 달력 프로필이 등록되어야 합니다.`);
+        assert.equal(profile.embeddedThrough, '2028-12-31', ruleId);
+    }
+});
+
+test('거래소별 공식 일정 공개 범위를 2028 내장 범위와 분리한다', () => {
+    assert.equal(engine.CALENDAR_PROFILES.CME_GROUP.officialThrough, '2026-12-31');
+    assert.equal(engine.CALENDAR_PROFILES.KRX.officialThrough, '2026-12-31');
+    assert.equal(engine.CALENDAR_PROFILES.HKEX.officialThrough, '2027-12-31');
+    assert.equal(engine.CALENDAR_PROFILES.US_OPTIONS.officialThrough, '2027-12-31');
 });
 
 test('2026-07-20 기준 각 상품군의 최근 두 만기일이 기대값과 일치한다', () => {
@@ -160,6 +183,10 @@ test('KRX 둘째 목요일과 HKEX 공식 거래 달력을 적용한다', () => 
     const hkex = engine.calculateHkexExpiry(engine.makeYmd(2026, 7, 1));
     assert.equal(engine.ymdKey(hkex.expiryDate), '2026-07-30');
     assert.equal(hkex.official, true);
+
+    const hkex2027 = engine.calculateHkexExpiry(engine.makeYmd(2027, 8, 1));
+    assert.equal(engine.ymdKey(hkex2027.expiryDate), '2027-08-30');
+    assert.equal(hkex2027.official, true);
 });
 
 test('KRX 규칙일이 휴일이면 직전 거래일로 앞당기고 확정 범위 밖은 예상으로 표시한다', () => {
@@ -185,6 +212,100 @@ test('미국 표준 월물은 Good Friday일 때 직전 영업일로 앞당긴�
 test('미국 현충일은 5월의 마지막 월요일로 처리한다', () => {
     assert.equal(engine.isUsStockBusinessDay(engine.makeYmd(2026, 5, 25)), false);
     assert.equal(engine.isUsStockBusinessDay(engine.makeYmd(2026, 5, 26)), true);
+});
+
+test('2028년 내장 달력의 대표 휴장일과 2027년 연말 예외를 적용한다', () => {
+    assert.equal(engine.isCmeBusinessDay(engine.makeYmd(2028, 4, 14)), false);
+    assert.equal(engine.isUsStockBusinessDay(engine.makeYmd(2028, 7, 4)), false);
+    assert.equal(engine.isUsStockBusinessDay(engine.makeYmd(2027, 12, 31)), true);
+    assert.equal(engine.isKrxBusinessDay(engine.makeYmd(2028, 4, 12)), false);
+    assert.equal(engine.isKrxBusinessDay(engine.makeYmd(2028, 4, 13)), true);
+    assert.equal(engine.isHkexBusinessDay(engine.makeYmd(2026, 9, 28)), true);
+    assert.equal(engine.isHkexBusinessDay(engine.makeYmd(2028, 1, 26)), false);
+    assert.equal(engine.isHkexBusinessDay(engine.makeYmd(2028, 5, 29)), false);
+    assert.equal(engine.isHkexBusinessDay(engine.makeYmd(2028, 5, 30)), true);
+});
+
+test('CME Good Friday는 상품군별 만기 처리 차이를 보존한다', () => {
+    const goodFriday2026 = engine.makeYmd(2026, 4, 3);
+    assert.equal(engine.isCmeBusinessDay(goodFriday2026), false);
+    assert.equal(engine.isCmeFxExpiryBusinessDay(goodFriday2026), true);
+    assert.equal(engine.isCbotInterestRateExpiryBusinessDay(goodFriday2026), true);
+    assert.equal(engine.isCmeFxExpiryBusinessDay(engine.makeYmd(2027, 3, 26)), false);
+    assert.equal(engine.isCbotInterestRateExpiryBusinessDay(engine.makeYmd(2027, 3, 26)), false);
+    assert.equal(
+        engine.ymdKey(engine.calculateCmeFxExpiry(engine.makeYmd(2026, 4, 1))),
+        '2026-04-03',
+    );
+    const aprilWeekly = engine.EXPIRY_RULES.cmeEquityWeekly14
+        .generate(engine.makeYmd(2026, 4, 1))
+        .find((candidate) => candidate.contractMonth.year === 2026
+            && candidate.contractMonth.month === 4
+            && candidate.weekNumber === 1);
+    assert.equal(engine.ymdKey(aprilWeekly.expiryDate), '2026-04-02');
+});
+
+test('2028년 후보는 내장 예상값이고 2029년부터는 내장 달력 범위 밖이다', () => {
+    const [in2028] = engine.getUpcomingExpiriesByRule(
+        'krxEquityMonthly',
+        engine.makeYmd(2028, 1, 1),
+        1,
+    );
+    assert.equal(in2028.estimated, true);
+    assert.equal(in2028.beyondEmbeddedCalendar, false);
+
+    const [in2029] = engine.getUpcomingExpiriesByRule(
+        'krxEquityMonthly',
+        engine.makeYmd(2029, 1, 1),
+        1,
+    );
+    assert.equal(in2029.estimated, true);
+    assert.equal(in2029.beyondEmbeddedCalendar, true);
+});
+
+test('공식 일정 공개 종료 2개월 전부터 경고하고 종료 다음 날 만료로 강화한다', () => {
+    const before = engine.getCalendarCoverageState(engine.makeYmd(2026, 10, 31));
+    assert.equal(before.level, 'ok');
+    assert.equal(before.affected.length, 0);
+
+    const warning = engine.getCalendarCoverageState(engine.makeYmd(2026, 11, 1));
+    assert.equal(warning.level, 'critical');
+    assert.deepEqual(
+        Array.from(warning.affected, (profile) => profile.id),
+        ['CME_GROUP', 'KRX'],
+    );
+    assert.ok(warning.affected.every((profile) => profile.warningStartsOn === '2026-11-01'));
+
+    const expired = engine.getCalendarCoverageState(engine.makeYmd(2027, 1, 1));
+    assert.equal(expired.level, 'expired');
+    assert.ok(expired.affected.some((profile) => profile.level === 'expired'));
+
+    const laterWarning = engine.getCalendarCoverageState(engine.makeYmd(2027, 11, 1));
+    const laterById = Object.fromEntries(
+        Array.from(laterWarning.affected, (profile) => [profile.id, profile]),
+    );
+    assert.equal(laterById.HKEX.level, 'critical');
+    assert.equal(laterById.US_OPTIONS.level, 'critical');
+
+    const finalPublishedDay = engine.getCalendarCoverageState(engine.makeYmd(2027, 12, 31));
+    const finalById = Object.fromEntries(
+        Array.from(finalPublishedDay.affected, (profile) => [profile.id, profile]),
+    );
+    assert.equal(finalById.HKEX.level, 'critical');
+    assert.equal(finalById.US_OPTIONS.level, 'critical');
+
+    const allExpired = engine.getCalendarCoverageState(engine.makeYmd(2028, 1, 1));
+    assert.ok(allExpired.affected.every((profile) => profile.level === 'expired'));
+});
+
+test('크리티컬 경고는 닫기 기능 없이 assertive alert로 고정된다', () => {
+    const alertMatch = html.match(
+        /<aside[\s\S]*?id="calendarCriticalAlert"[\s\S]*?<\/aside>/,
+    );
+    assert.ok(alertMatch, '크리티컬 달력 경고 영역이 필요합니다.');
+    assert.match(alertMatch[0], /role="alert"/);
+    assert.match(alertMatch[0], /aria-live="assertive"/);
+    assert.doesNotMatch(alertMatch[0], /<button\b/);
 });
 
 test('같은 UTC 시각도 거래소 현지 날짜에 맞춰 기준일을 분리한다', () => {
