@@ -1,0 +1,128 @@
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const path = require('node:path');
+const test = require('node:test');
+const vm = require('node:vm');
+
+const htmlPath = path.join(__dirname, '..', 'index.html');
+const html = fs.readFileSync(htmlPath, 'utf8');
+const calculatorMatch = html.match(
+    /\/\/ FUTURES_CALCULATOR_START([\s\S]*?)\/\/ FUTURES_CALCULATOR_END/,
+);
+
+assert.ok(calculatorMatch, 'HTML에서 선물 계산 엔진 블록을 찾을 수 있어야 합니다.');
+
+const context = vm.createContext({ Math, Number });
+vm.runInContext(`${calculatorMatch[1]}; this.calculate = calculateFuturesPosition;`, context);
+const calculate = context.calculate;
+
+function input(overrides = {}) {
+    return {
+        direction: 'long',
+        contracts: 1,
+        multiplier: 10,
+        entryPrice: 262500,
+        currentPrice: 262500,
+        referencePrice: 262500,
+        accountEquity: 1181250,
+        initialMarginRate: 45,
+        maintenanceMarginRate: 30,
+        costs: 0,
+        tickSize: 500,
+        ...overrides,
+    };
+}
+
+test('삼성전자선물 1계약의 명목금액·증거금·민감도를 계산한다', () => {
+    const result = calculate(input());
+    assert.equal(result.valid, true);
+    assert.equal(result.notional, 2625000);
+    assert.equal(result.initialMargin, 1181250);
+    assert.equal(result.maintenanceMargin, 787500);
+    assert.equal(result.tickValue, 5000);
+    assert.equal(result.onePercentPnl, 26250);
+    assert.equal(result.boundaryPrice, 223125);
+});
+
+test('SK하이닉스선물 스냅샷 계산값을 재현한다', () => {
+    const result = calculate(input({
+        multiplier: 10,
+        entryPrice: 1718000,
+        currentPrice: 1718000,
+        referencePrice: 1718000,
+        accountEquity: 8323710,
+        initialMarginRate: 48.45,
+        maintenanceMarginRate: 32.3,
+        tickSize: 1000,
+    }));
+    assert.equal(result.notional, 17180000);
+    assert.ok(Math.abs(result.initialMargin - 8323710) < 0.0001);
+    assert.ok(Math.abs(result.maintenanceMargin - 5549140) < 0.0001);
+    assert.equal(result.tickValue, 10000);
+    assert.equal(result.boundaryPrice, 1440543);
+});
+
+test('미니·정규 코스피200선물의 계약 규모와 틱 가치를 계산한다', () => {
+    const mini = calculate(input({
+        multiplier: 50000,
+        entryPrice: 1046.81,
+        currentPrice: 1046.81,
+        referencePrice: 1046.81,
+        accountEquity: 10991505,
+        initialMarginRate: 21,
+        maintenanceMarginRate: 14,
+        tickSize: 0.02,
+    }));
+    const regular = calculate(input({
+        multiplier: 250000,
+        entryPrice: 1046.81,
+        currentPrice: 1046.81,
+        referencePrice: 1046.81,
+        accountEquity: 54957525,
+        initialMarginRate: 21,
+        maintenanceMarginRate: 14,
+        tickSize: 0.05,
+    }));
+
+    assert.equal(mini.notional, 52340500);
+    assert.equal(mini.initialMargin, 10991505);
+    assert.equal(mini.maintenanceMargin, 7327670.000000001);
+    assert.equal(mini.tickValue, 1000);
+    assert.ok(Math.abs(mini.boundaryPrice - 973.5333) < 0.0001);
+
+    assert.equal(regular.notional, 261702500);
+    assert.equal(regular.initialMargin, 54957525);
+    assert.equal(regular.maintenanceMargin, 36638350);
+    assert.equal(regular.tickValue, 12500);
+    assert.ok(Math.abs(regular.boundaryPrice - 973.5333) < 0.0001);
+});
+
+test('롱과 숏의 손익 및 위험 경계 방향이 반대로 움직인다', () => {
+    const long = calculate(input({ currentPrice: 263500 }));
+    const short = calculate(input({ direction: 'short', currentPrice: 263500 }));
+    assert.equal(long.pnl, 10000);
+    assert.equal(short.pnl, -10000);
+    assert.equal(long.boundaryPrice, 223125);
+    assert.equal(short.boundaryPrice, 301875);
+});
+
+test('계약 수와 비용을 계좌평가액 및 증거금에 반영한다', () => {
+    const result = calculate(input({
+        contracts: 2,
+        accountEquity: 2362500,
+        currentPrice: 261500,
+        costs: 2500,
+    }));
+    assert.equal(result.initialMargin, 2362500);
+    assert.equal(result.maintenanceMargin, 1575000);
+    assert.equal(result.pnl, -20000);
+    assert.equal(result.estimatedEquity, 2340000);
+    assert.equal(result.marginBuffer, 765000);
+});
+
+test('유효하지 않은 계약 수와 증거금률 조합을 거부한다', () => {
+    assert.equal(calculate(input({ contracts: 1.5 })).valid, false);
+    assert.equal(calculate(input({ contracts: 0 })).valid, false);
+    assert.equal(calculate(input({ initialMarginRate: 10, maintenanceMarginRate: 20 })).valid, false);
+    assert.equal(calculate(input({ entryPrice: 0 })).valid, false);
+});

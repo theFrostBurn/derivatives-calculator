@@ -4,7 +4,7 @@ const path = require('node:path');
 const test = require('node:test');
 const vm = require('node:vm');
 
-const htmlPath = path.join(__dirname, '..', 'option-calculator.html');
+const htmlPath = path.join(__dirname, '..', 'index.html');
 const html = fs.readFileSync(htmlPath, 'utf8');
 const engineMatch = html.match(
     /\/\/ EXPIRY_ENGINE_START([\s\S]*?)\/\/ EXPIRY_ENGINE_END/,
@@ -74,9 +74,9 @@ test('전체 인라인 스크립트와 만기 패널 DOM 연결이 유효하다'
     }
 });
 
-test('26개 상품이 모두 등록된 공용 만기 규칙을 참조한다', () => {
+test('옵션 26개와 선물 4개가 고유 ID와 등록된 만기 규칙을 사용한다', () => {
     const productsMatch = html.match(
-        /const PRODUCTS = (\[[\s\S]*?\n\s*\]);\n\n\s*\/\/ EXPIRY_ENGINE_START/,
+        /const PRODUCTS = (\[[\s\S]*?\n\s*\]);/,
     );
     assert.ok(productsMatch, 'PRODUCTS 배열을 추출할 수 있어야 합니다.');
 
@@ -84,13 +84,28 @@ test('26개 상품이 모두 등록된 공용 만기 규칙을 참조한다', ()
     vm.runInContext(`this.products = ${productsMatch[1]};`, productsContext);
     const products = productsContext.products;
 
-    assert.equal(products.length, 26);
+    for (const product of products) {
+        product.instrumentType ??= 'option';
+        product.pricingModel ??= 'premium';
+    }
+
+    assert.equal(products.length, 30);
+    assert.equal(products.filter((product) => product.instrumentType === 'option').length, 26);
+    assert.equal(products.filter((product) => product.instrumentType === 'future').length, 4);
+    assert.equal(new Set(products.map((product) => product.id ?? product.code)).size, products.length);
     for (const product of products) {
         assert.ok(product.expiryRuleId, `${product.id}에 expiryRuleId가 필요합니다.`);
         assert.ok(
             engine.EXPIRY_RULES[product.expiryRuleId],
             `${product.id}의 만기 규칙 ${product.expiryRuleId}가 등록되어야 합니다.`,
         );
+    }
+
+    for (const product of products.filter((item) => item.instrumentType === 'future')) {
+        assert.equal(product.pricingModel, 'futuresMargin', product.id);
+        assert.ok(product.marginSnapshot, `${product.id}에 증거금 스냅샷이 필요합니다.`);
+        assert.ok(Number(product.valuePerQuoteUnit) > 0, `${product.id}에 승수가 필요합니다.`);
+        assert.ok(Number(product.tickSize) > 0, `${product.id}에 틱 크기가 필요합니다.`);
     }
 });
 
@@ -187,6 +202,10 @@ test('KRX 둘째 목요일과 HKEX 공식 거래 달력을 적용한다', () => 
     const hkex2027 = engine.calculateHkexExpiry(engine.makeYmd(2027, 8, 1));
     assert.equal(engine.ymdKey(hkex2027.expiryDate), '2027-08-30');
     assert.equal(hkex2027.official, true);
+});
+
+test('코스피200 선물은 분기월물의 둘째 목요일만 표시한다', () => {
+    assert.deepEqual(keys('krxEquityQuarterly'), ['2026-09-10', '2026-12-10']);
 });
 
 test('KRX 규칙일이 휴일이면 직전 거래일로 앞당기고 확정 범위 밖은 예상으로 표시한다', () => {

@@ -7,24 +7,26 @@
 - 명령/경로는 Windows 환경에 맞는 형식을 사용합니다.
 
 ## 프로젝트 개요
-- 단일 `option-calculator.html`에서 동작하는 옵션 승수 기반 계산기입니다.
-- 종목 선택 시 승수/입력 단위를 자동 적용하고 1계약 필요금액 및 KRW 환산, 수수료/목표가/손익 차트를 제공합니다.
+- 단일 `index.html`에서 동작하는 파생상품 계약 계산기입니다.
+- 옵션은 프리미엄 총액·KRW 환산·수수료·목표가·손익 차트를, 선물은 명목금액·위탁/유지증거금·롱/숏 손익·위험 경계를 제공합니다.
 - 외부 의존성: Chart.js CDN, 환율 API 2곳.
 
 ## 실행 방법
-- 브라우저에서 `option-calculator.html`을 직접 열 수 있습니다.
+- 브라우저에서 `index.html`을 직접 열 수 있습니다.
 - 환율 자동 불러오기는 `fetch()`가 필요하므로 로컬 서버 권장:
   - `python -m http.server 8000`
-  - `http://localhost:8000/option-calculator.html`
+  - `http://localhost:8000/`
 
 ## 빌드/테스트
 - 빌드/패키지 매니저 없음.
-- 자동 테스트 없음.
+- Node.js 내장 테스트 러너 기반 회귀 테스트가 있습니다.
 
 ## 데이터/도메인 규칙
-- 상품 정의는 `option-calculator.html`의 `PRODUCTS` 배열이 단일 소스입니다.
-- `option_multipliers.md`는 참고용 표이므로 `PRODUCTS` 변경 시 함께 갱신하세요.
+- 상품 정의는 `index.html`의 `PRODUCTS` 배열이 단일 소스입니다.
+- `docs/파생상품_계약사양.md`는 참고용 표이므로 `PRODUCTS` 변경 시 함께 갱신하세요.
 - `id`는 코드 중복(예: OZM) 구분 및 localStorage 키로 사용하므로 새 상품 추가 시 고유하게 유지합니다.
+- `instrumentType`은 `option` 또는 `future`, `pricingModel`은 `premium` 또는 `futuresMargin`으로 구분합니다.
+- 선물 증거금률·기준가격은 변동 데이터이므로 `marginSnapshot`에 기준일·증권사·출처를 함께 기록하고 화면에서 수정 가능하게 유지합니다.
 - `parseMode`:
   - `number`: 일반 숫자
   - `bond32`: 32분할 (`110'16`, `110'16+`, `110 16/32`)
@@ -36,6 +38,7 @@
 ## 코드 스타일/구조
 - 단일 HTML 파일에 CSS/JS 인라인 구성.
 - 기존 함수 분리 패턴 유지 (`parse*`, `recalculate`, `updateChart` 등).
+- 옵션과 선물 계산 모델을 섞지 않고 `instrumentType`에 따라 UI와 계산 함수를 분리합니다.
 - 로컬 저장은 `safeGetItem`/`safeSetItem`로 감싸 예외를 삼킵니다.
 
 ## 보안/네트워크
