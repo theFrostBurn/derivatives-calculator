@@ -29,17 +29,16 @@
 - 상품별 최근 최종거래일 2개와 D-day
 - 거래소 현지 날짜를 반영한 만기 판정
 - 공식 거래 달력 공개 범위와 규칙 기반 예상값 구분
-- 상품별 입력값을 브라우저 `localStorage`에 저장
+- 선택한 상품과 `현재 값들을 기본값으로 저장`으로 지정한 상품별 입력값을 브라우저 `localStorage`에 저장
 
 ## 파일 구성
 
 - `index.html`: 앱 본체
-- `option-calculator.html`: 이전 주소를 위한 `index.html` 이동 페이지
 - `docs/파생상품_계약사양.md`: 옵션·선물 계약 사양 참고표
 - `docs/선물_4종목_계약과_증거금.md`: 4개 선물의 통합 설명과 계산 근거
-- `docs/data-snapshots/README.md`: 변동 가능한 증거금 자료 기록 규칙
 - `tests/expiry.test.cjs`: 만기 엔진과 상품 데이터 회귀 테스트
 - `tests/futures.test.cjs`: 선물 증거금·손익 계산 테스트
+- `tests/fx.test.cjs`: 환율 캐시와 비동기 요청 회귀 테스트
 
 ## 실행 방법
 
@@ -90,7 +89,7 @@ node --test .\tests\expiry.test.cjs .\tests\futures.test.cjs .\tests\fx.test.cjs
 
 ## 증거금 데이터 주의사항
 
-기준가격과 증거금률은 고정 계약 사양이 아닙니다. 앱에 포함된 4개 선물의 수치는 제공된 삼성증권 HTS 자료를 재현한 예시지만 정확한 원본 조회일이 기록되어 있지 않습니다. 화면에서 값을 수정할 수 있으며, 실제 주문 전 당일 HTS 수치를 다시 입력해야 합니다.
+기준가격과 증거금률은 고정 계약 사양이 아닙니다. 앱에 포함된 4개 선물의 수치는 조회일이 남아 있지 않은 과거 삼성증권 HTS 전사값을 재현한 예시입니다. 화면에서 값을 수정할 수 있으며, 실제 주문 전 당일 HTS 수치를 다시 입력해야 합니다.
 
 `유지증거금 미달 추정 경계`는 다음을 가정한 단순 계산입니다.
 
@@ -98,6 +97,8 @@ node --test .\tests\expiry.test.cjs .\tests\futures.test.cjs .\tests\fx.test.cjs
 - 다른 포지션과 추가 입출금이 없음
 - 입력한 예상 총비용 외 비용이 없음
 - 유지증거금 미달과 실제 반대매매가 같은 시점이라는 의미가 아님
+
+옵션 수수료도 앱의 기본 추정값입니다. 실제 수수료는 상품과 계좌 조건에 따라 달라질 수 있으므로 주문 전 증권사 수수료 화면을 확인해야 합니다.
 
 ## 입력 규칙
 
@@ -119,8 +120,7 @@ node --test .\tests\expiry.test.cjs .\tests\futures.test.cjs .\tests\fx.test.cjs
 - 자동 환율 출처: `api.frankfurter.app`, `open.er-api.com`
 - 자동·수동 환율은 통화별로 브라우저 `localStorage`에 저장하며 캐시 TTL은 6시간
 - KRW 상품은 환율 미적용
-- 새 저장 키: `derivativesCalculator.*`
-- 기존 `optionCalculator.*` 값은 새 키가 없을 때 한 번 읽어 호환 이전
+- 저장 키: `derivativesCalculator.*`
 
 ## 만기 일정 범위
 

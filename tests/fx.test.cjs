@@ -16,6 +16,10 @@ const fetchMatch = html.match(
 assert.ok(cacheMatch, 'HTML에서 환율 캐시 블록을 찾을 수 있어야 합니다.');
 assert.ok(fetchMatch, 'HTML에서 환율 조회 블록을 찾을 수 있어야 합니다.');
 
+test('현재 프로젝트 저장 키만 사용하고 과거 옵션 계산기 호환 코드는 포함하지 않는다', () => {
+    assert.doesNotMatch(html, /optionCalculator|LEGACY_STORAGE|migrateLegacyStorage/);
+});
+
 function createStorageContext(initialEntries = []) {
     const entries = new Map(initialEntries);
     const context = vm.createContext({

@@ -122,6 +122,7 @@
 
         .chart-section {
             flex: 1;
+            min-width: 0;
         }
 
         .field {
@@ -590,7 +591,35 @@
             display: grid;
             grid-template-columns: repeat(2, minmax(0, 1fr));
             gap: 0.55rem;
-            padding-top: 0.25rem;
+        }
+
+        .future-summary {
+            display: flex;
+            flex-direction: column;
+            gap: 0.7rem;
+            margin-top: 1rem;
+            padding-top: 1rem;
+            border-top: 1px solid var(--desk-line);
+        }
+
+        .future-summary-header {
+            display: flex;
+            align-items: baseline;
+            justify-content: space-between;
+            gap: 0.75rem;
+        }
+
+        .future-summary-title {
+            color: var(--desk-copy);
+            font-size: 0.9rem;
+            font-weight: 750;
+        }
+
+        .future-summary-caption {
+            color: var(--desk-muted);
+            font-family: Consolas, "Cascadia Mono", monospace;
+            font-size: 0.65rem;
+            letter-spacing: 0.08em;
         }
 
         .metric-card {
@@ -638,6 +667,16 @@
             background: rgba(185, 52, 52, 0.28);
         }
 
+        .content[data-instrument-type="future"] {
+            align-items: flex-start;
+            gap: 1.5rem;
+        }
+
+        .content[data-instrument-type="future"] .chart-title {
+            padding-right: 0;
+            text-align: left;
+        }
+
         .input, .select, .button {
             border-color: var(--desk-line);
             background-color: var(--desk-panel-raised);
@@ -666,6 +705,12 @@
             .future-results {
                 grid-template-columns: 1fr;
             }
+
+            .future-summary-header {
+                align-items: flex-start;
+                flex-direction: column;
+                gap: 0.2rem;
+            }
         }
     </style>
 </head>
@@ -692,7 +737,7 @@
             <p class="calendar-critical-body" id="calendarCriticalBody"></p>
         </aside>
 
-        <div class="content">
+        <div class="content" id="calculatorContent" data-instrument-type="option">
             <div class="form-section">
                 <div class="section-kicker">INSTRUMENT TYPE</div>
                 <div class="instrument-switch" role="tablist" aria-label="상품 유형">
@@ -824,19 +869,6 @@
 
                     <div class="data-stamp" id="futureDataStamp"></div>
                     <div class="error" id="futureError" hidden></div>
-
-                    <div class="future-results" aria-live="polite">
-                        <div class="metric-card"><div class="metric-label">명목금액</div><div class="metric-value" id="futureNotional">-</div></div>
-                        <div class="metric-card emphasis"><div class="metric-label">위탁증거금</div><div class="metric-value" id="futureInitialMargin">-</div></div>
-                        <div class="metric-card"><div class="metric-label">유지증거금</div><div class="metric-value" id="futureMaintenanceMargin">-</div></div>
-                        <div class="metric-card"><div class="metric-label">증거금 여유</div><div class="metric-value" id="futureMarginBuffer">-</div></div>
-                        <div class="metric-card"><div class="metric-label">평가손익</div><div class="metric-value" id="futurePnl">-</div></div>
-                        <div class="metric-card"><div class="metric-label">추정 계좌평가액</div><div class="metric-value" id="futureEstimatedEquity">-</div></div>
-                        <div class="metric-card"><div class="metric-label">1틱 / 1% 손익</div><div class="metric-value" id="futureSensitivity">-</div></div>
-                        <div class="metric-card emphasis"><div class="metric-label">유지증거금 미달 추정 경계</div><div class="metric-value" id="futureBoundaryPrice">-</div></div>
-                    </div>
-                    <div class="risk-status" id="futureRiskStatus">입력값을 확인하는 중입니다.</div>
-                    <div class="risk-notice">유지증거금 미달 추정 경계는 입력한 계좌금액과 증거금률이 유지되고 다른 포지션·추가 입출금이 없다는 단순 가정입니다. 실제 추가증거금과 반대매매 시점은 일일정산 및 증권사 위험관리 기준에 따라 달라집니다.</div>
                 </section>
 
                 <div style="display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap;">
@@ -852,6 +884,25 @@
                     <div class="error" id="chartUnavailable" style="display: none;">차트를 표시하려면 Chart.js 로딩이 필요합니다(오프라인이면 표시되지 않을 수 있음).</div>
                     <canvas id="profitChart"></canvas>
                 </div>
+
+                <section class="future-summary future-only" aria-labelledby="futureSummaryTitle" hidden>
+                    <div class="future-summary-header">
+                        <h3 class="future-summary-title" id="futureSummaryTitle">포지션 핵심 수치</h3>
+                        <span class="future-summary-caption">MARGIN &amp; RISK READOUT</span>
+                    </div>
+                    <div class="future-results" aria-live="polite">
+                        <div class="metric-card"><div class="metric-label">명목금액</div><div class="metric-value" id="futureNotional">-</div></div>
+                        <div class="metric-card emphasis"><div class="metric-label">위탁증거금</div><div class="metric-value" id="futureInitialMargin">-</div></div>
+                        <div class="metric-card"><div class="metric-label">유지증거금</div><div class="metric-value" id="futureMaintenanceMargin">-</div></div>
+                        <div class="metric-card"><div class="metric-label">증거금 여유</div><div class="metric-value" id="futureMarginBuffer">-</div></div>
+                        <div class="metric-card"><div class="metric-label">평가손익</div><div class="metric-value" id="futurePnl">-</div></div>
+                        <div class="metric-card"><div class="metric-label">추정 계좌평가액</div><div class="metric-value" id="futureEstimatedEquity">-</div></div>
+                        <div class="metric-card"><div class="metric-label">1틱 / 1% 손익</div><div class="metric-value" id="futureSensitivity">-</div></div>
+                        <div class="metric-card emphasis"><div class="metric-label">유지증거금 미달 추정 경계</div><div class="metric-value" id="futureBoundaryPrice">-</div></div>
+                    </div>
+                    <div class="risk-status" id="futureRiskStatus">입력값을 확인하는 중입니다.</div>
+                    <div class="risk-notice">유지증거금 미달 추정 경계는 입력한 계좌금액과 증거금률이 유지되고 다른 포지션·추가 입출금이 없다는 단순 가정입니다. 실제 추가증거금과 반대매매 시점은 일일정산 및 증권사 위험관리 기준에 따라 달라집니다.</div>
+                </section>
 
                 <div style="margin-top: 1rem;">
                     <div id="advancedDetails" class="advanced-panel option-only">
@@ -1440,7 +1491,7 @@
                 label: '미국 주식옵션 공통',
                 officialThrough: '2027-12-31',
                 embeddedThrough: CALENDAR_EMBEDDED_THROUGH,
-                sourceUrl: 'https://www.optionseducation.org/referencelibrary/expiration-calendar',
+                sourceUrl: 'https://www.optionseducation.org/getmedia/210094f5-fac1-48e2-a148-74c52d8ea628/2027-Expiration-Calendar.pdf?ext=.pdf',
             }),
             KRX: Object.freeze({
                 label: 'KRX',
@@ -1452,7 +1503,7 @@
                 label: 'HKEX',
                 officialThrough: '2027-12-31',
                 embeddedThrough: CALENDAR_EMBEDDED_THROUGH,
-                sourceUrl: 'https://www.hkex.com.hk/-/media/HKEX-Market/Services/Circulars-and-Notices/Participant-and-Members-Circulars/HKFE/2026/MO_DT_134_26_e.pdf',
+                sourceUrl: 'https://www.hkex.com.hk/services/trading/derivatives/overview/trading-calendar-and-holiday-schedule?sc_lang=en',
             }),
         });
 
@@ -2166,14 +2217,6 @@
             selectedProductId: 'derivativesCalculator.selectedProductId',
             selectedProductCode: 'derivativesCalculator.selectedProductCode',
             selectedInstrumentType: 'derivativesCalculator.selectedInstrumentType',
-            defaultsProfitPercentage: 'derivativesCalculator.defaults.profitPercentage',
-            migrated: 'derivativesCalculator.storageMigrated.v1',
-        };
-
-        const LEGACY_STORAGE = {
-            selectedProductId: 'optionCalculator.selectedProductId',
-            selectedProductCode: 'optionCalculator.selectedProductCode',
-            defaultsProfitPercentage: 'optionCalculator.defaults.profitPercentage',
         };
 
         const FX_CACHE_TTL_MS = 6 * 60 * 60 * 1000;
@@ -2195,6 +2238,7 @@
         let fxRequestSequence = 0;
 
         const el = {
+            calculatorContent: document.getElementById('calculatorContent'),
             calendarCriticalAlert: document.getElementById('calendarCriticalAlert'),
             calendarCriticalTitle: document.getElementById('calendarCriticalTitle'),
             calendarCriticalBody: document.getElementById('calendarCriticalBody'),
@@ -2296,16 +2340,6 @@
             }
         }
 
-        function migrateLegacyStorage() {
-            if (safeGetItem(STORAGE.migrated)) return;
-            for (const key of ['selectedProductId', 'selectedProductCode', 'defaultsProfitPercentage']) {
-                const current = safeGetItem(STORAGE[key]);
-                const legacy = safeGetItem(LEGACY_STORAGE[key]);
-                if (current === null && legacy !== null) safeSetItem(STORAGE[key], legacy);
-            }
-            safeSetItem(STORAGE.migrated, new Date().toISOString());
-        }
-
         function setDefaultsStatus(message, tone = 'info') {
             el.defaultsStatus.textContent = message || '';
             el.defaultsStatus.style.color = tone === 'error' ? '#fca5a5' : '#9ca3af';
@@ -2319,40 +2353,20 @@
             return `derivativesCalculator.defaults.profitPercentage.${productKey}`;
         }
 
-        function getLegacyQuoteDefaultKey(productKey) {
-            return `optionCalculator.defaults.quotePrice.${productKey}`;
-        }
-
-        function getLegacyProfitDefaultKey(productKey) {
-            return `optionCalculator.defaults.profitPercentage.${productKey}`;
-        }
-
         function getFutureDefaultKey(productKey, field) {
             return `derivativesCalculator.defaults.future.${productKey}.${field}`;
         }
 
         function applySavedQuoteForProduct(productKey) {
-            const newKey = getQuoteDefaultKey(productKey);
-            const raw = safeGetItem(newKey) ?? safeGetItem(getLegacyQuoteDefaultKey(productKey));
-            if (raw !== null && safeGetItem(newKey) === null) safeSetItem(newKey, raw);
+            const raw = safeGetItem(getQuoteDefaultKey(productKey));
             if (raw && String(raw).trim()) el.quotePrice.value = String(raw);
         }
 
         function applySavedProfitForProduct(productKey) {
-            const newKey = getProfitDefaultKey(productKey);
-            const perProductRaw = safeGetItem(newKey) ?? safeGetItem(getLegacyProfitDefaultKey(productKey));
-            if (perProductRaw !== null && safeGetItem(newKey) === null) safeSetItem(newKey, perProductRaw);
+            const perProductRaw = safeGetItem(getProfitDefaultKey(productKey));
             const perProductValue = Number(perProductRaw);
             if (Number.isFinite(perProductValue) && perProductValue >= 0) {
                 el.profitPercentage.value = String(perProductValue);
-                return;
-            }
-
-            const legacyRaw = safeGetItem(STORAGE.defaultsProfitPercentage)
-                ?? safeGetItem(LEGACY_STORAGE.defaultsProfitPercentage);
-            const legacyValue = Number(legacyRaw);
-            if (Number.isFinite(legacyValue) && legacyValue >= 0) {
-                el.profitPercentage.value = String(legacyValue);
             }
         }
 
@@ -2703,6 +2717,7 @@
 
         function updateInstrumentVisibility() {
             const isFuture = selectedInstrumentType === 'future';
+            el.calculatorContent.dataset.instrumentType = selectedInstrumentType;
             el.optionTab.setAttribute('aria-selected', String(!isFuture));
             el.futureTab.setAttribute('aria-selected', String(isFuture));
             for (const node of document.querySelectorAll('.option-only')) node.hidden = isFuture;
@@ -3671,7 +3686,6 @@
 
         function bootstrap() {
             updateCalendarCriticalAlert();
-            migrateLegacyStorage();
             const savedId = safeGetItem(STORAGE.selectedProductId);
             const savedCode = safeGetItem(STORAGE.selectedProductCode);
             const initialKey = savedId || savedCode || 'OES';

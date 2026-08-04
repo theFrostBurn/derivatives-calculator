@@ -16,6 +16,18 @@ const context = vm.createContext({ Math, Number });
 vm.runInContext(`${calculatorMatch[1]}; this.calculate = calculateFuturesPosition;`, context);
 const calculate = context.calculate;
 
+test('선물 결과는 차트 아래 요약 영역에 배치되고 모드별 레이아웃 상태를 노출한다', () => {
+    const chartIndex = html.indexOf('class="chart-container"');
+    const summaryIndex = html.indexOf('class="future-summary future-only"');
+    const firstMetricIndex = html.indexOf('id="futureNotional"');
+
+    assert.ok(chartIndex >= 0, '차트 컨테이너가 있어야 합니다.');
+    assert.ok(summaryIndex > chartIndex, '선물 요약은 차트 다음에 배치되어야 합니다.');
+    assert.ok(firstMetricIndex > summaryIndex, '선물 핵심 수치는 요약 영역 안에 있어야 합니다.');
+    assert.match(html, /id="calculatorContent" data-instrument-type="option"/);
+    assert.match(html, /calculatorContent\.dataset\.instrumentType = selectedInstrumentType/);
+});
+
 function input(overrides = {}) {
     return {
         direction: 'long',

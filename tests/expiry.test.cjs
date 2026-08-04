@@ -109,6 +109,26 @@ test('옵션 26개와 선물 4개가 고유 ID와 등록된 만기 규칙을 사
     }
 });
 
+test('계약 사양 문서는 모든 상품의 내부 ID를 포함한다', () => {
+    const productsMatch = html.match(
+        /const PRODUCTS = (\[[\s\S]*?\n\s*\]);/,
+    );
+    const productsContext = vm.createContext({});
+    vm.runInContext(`this.products = ${productsMatch[1]};`, productsContext);
+    const specification = fs.readFileSync(
+        path.join(__dirname, '..', 'docs', '파생상품_계약사양.md'),
+        'utf8',
+    );
+
+    for (const product of productsContext.products) {
+        const productId = product.id ?? product.code;
+        assert.ok(
+            specification.includes(productId),
+            `계약 사양 문서에 ${productId} 내부 ID가 있어야 합니다.`,
+        );
+    }
+});
+
 test('모든 만기 규칙이 2028년 말까지 내장된 달력 프로필을 참조한다', () => {
     for (const [ruleId, rule] of Object.entries(engine.EXPIRY_RULES)) {
         const profile = engine.CALENDAR_PROFILES[rule.calendarProfileId];

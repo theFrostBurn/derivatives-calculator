@@ -1,0 +1,18 @@
+# 로컬 도구 설정
+.claude/
+.agents/
+.orca/
+/ .orca/
+
+# 운영체제·편집기 파일
+.DS_Store
+Thumbs.db
+*.swp
+*.tmp
+*.bak
+
+# 실행·테스트 산출물
+*.log
+coverage/
+.nyc_output/
+node_modules/
