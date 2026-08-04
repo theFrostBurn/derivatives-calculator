@@ -26,6 +26,20 @@ test('선물 결과는 차트 아래 요약 영역에 배치되고 모드별 레
     assert.ok(firstMetricIndex > summaryIndex, '선물 핵심 수치는 요약 영역 안에 있어야 합니다.');
     assert.match(html, /id="calculatorContent" data-instrument-type="option"/);
     assert.match(html, /calculatorContent\.dataset\.instrumentType = selectedInstrumentType/);
+    assert.match(html, /id="futureOneContractMargin"/);
+    assert.match(html, /id="futureMinimumBoundary"/);
+    assert.match(html, /formatAmount\(Number\(input\.initialMarginRate\), 2\)/);
+});
+
+test('선물 차트는 현재가와 정확한 위험 기준을 숫자형 가격축에 표시한다', () => {
+    const chartMatch = html.match(
+        /function updateFuturesChart\([\s\S]*?\n\s*function resetFuturesResults/,
+    );
+    assert.ok(chartMatch, '선물 차트 구현을 찾을 수 있어야 합니다.');
+    assert.match(chartMatch[0], /const currentPrice = Number\(input\.currentPrice\)/);
+    assert.match(chartMatch[0], /type: 'linear'/);
+    assert.match(chartMatch[0], /markerDataset\('현재가격'/);
+    assert.match(chartMatch[0], /입력 기준가격 기준 유지증거금\(고정\)/);
 });
 
 function input(overrides = {}) {
@@ -54,6 +68,22 @@ test('삼성전자선물 1계약의 명목금액·증거금·민감도를 계산
     assert.equal(result.tickValue, 5000);
     assert.equal(result.onePercentPnl, 26250);
     assert.equal(result.boundaryPrice, 223125);
+    assert.equal(result.oneContractInitialMargin, 1181250);
+    assert.equal(result.minimumBoundaryPrice, 223125);
+    assert.equal(result.minimumBoundaryMovePercent, -15);
+});
+
+test('추가 예치 없는 1계약 마진콜 추정은 사용자 계좌 투입금과 분리한다', () => {
+    const result = calculate(input({
+        contracts: 3,
+        accountEquity: 10000000,
+        costs: 50000,
+    }));
+
+    assert.equal(result.oneContractInitialMargin, 1181250);
+    assert.equal(result.oneContractMaintenanceMargin, 787500);
+    assert.equal(result.minimumBoundaryPrice, 223125);
+    assert.notEqual(result.boundaryPrice, result.minimumBoundaryPrice);
 });
 
 test('SK하이닉스선물 스냅샷 계산값을 재현한다', () => {

@@ -602,6 +602,45 @@
             border-top: 1px solid var(--desk-line);
         }
 
+        .future-decision-strip {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 0.65rem;
+            margin-bottom: 1rem;
+        }
+
+        .future-decision-card {
+            min-width: 0;
+            border: 1px solid rgba(255, 202, 88, 0.5);
+            border-radius: 0.55rem;
+            padding: 0.85rem;
+            background: linear-gradient(145deg, rgba(255, 202, 88, 0.12), rgba(8, 17, 31, 0.7));
+        }
+
+        .future-decision-question {
+            color: #f8d98d;
+            font-size: 0.7rem;
+            font-weight: 750;
+            line-height: 1.4;
+        }
+
+        .future-decision-value {
+            margin-top: 0.35rem;
+            color: var(--desk-copy);
+            font-family: Consolas, "Cascadia Mono", monospace;
+            font-size: clamp(1.05rem, 2.2vw, 1.35rem);
+            font-weight: 800;
+            font-variant-numeric: tabular-nums;
+            overflow-wrap: anywhere;
+        }
+
+        .future-decision-detail {
+            margin-top: 0.3rem;
+            color: var(--desk-muted);
+            font-size: 0.68rem;
+            line-height: 1.45;
+        }
+
         .future-summary-header {
             display: flex;
             align-items: baseline;
@@ -702,7 +741,8 @@
         @media (max-width: 560px) {
             .instrument-switch,
             .input-grid,
-            .future-results {
+            .future-results,
+            .future-decision-strip {
                 grid-template-columns: 1fr;
             }
 
@@ -878,7 +918,19 @@
             </div>
 
             <div class="chart-section" id="chartSection">
-                <h3 class="chart-title" id="chartTitle">수익/손실 차트 (1계약)</h3>
+                <section class="future-decision-strip future-only" aria-label="선물 핵심 질문" aria-live="polite" hidden>
+                    <article class="future-decision-card">
+                        <div class="future-decision-question">1계약 진입에 필요한 위탁증거금</div>
+                        <div class="future-decision-value" id="futureOneContractMargin">-</div>
+                        <div class="future-decision-detail" id="futureOneContractMarginDetail">기준가격과 위탁증거금률로 계산합니다.</div>
+                    </article>
+                    <article class="future-decision-card">
+                        <div class="future-decision-question">추가 예치 0원 시 마진콜 추정 경계</div>
+                        <div class="future-decision-value" id="futureMinimumBoundary">-</div>
+                        <div class="future-decision-detail" id="futureMinimumBoundaryDetail">1계약·비용 제외·입력 증거금률 고정 가정입니다.</div>
+                    </article>
+                </section>
+                <h3 class="chart-title" id="chartTitle">옵션 프리미엄 재매도 순손익 (1계약)</h3>
                 <div class="help" id="chartContext">매도 시점 옵션가격 변화에 따른 손익(수수료 반영)</div>
                 <div class="chart-container">
                     <div class="error" id="chartUnavailable" style="display: none;">차트를 표시하려면 Chart.js 로딩이 필요합니다(오프라인이면 표시되지 않을 수 있음).</div>
@@ -933,7 +985,7 @@
         </div>
     </div>
 
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.9/dist/chart.umd.min.js"></script>
     <script>
         const PRODUCTS = [
             {
@@ -2307,6 +2359,10 @@
             futureCosts: document.getElementById('futureCosts'),
             futureDataStamp: document.getElementById('futureDataStamp'),
             futureError: document.getElementById('futureError'),
+            futureOneContractMargin: document.getElementById('futureOneContractMargin'),
+            futureOneContractMarginDetail: document.getElementById('futureOneContractMarginDetail'),
+            futureMinimumBoundary: document.getElementById('futureMinimumBoundary'),
+            futureMinimumBoundaryDetail: document.getElementById('futureMinimumBoundaryDetail'),
             futureNotional: document.getElementById('futureNotional'),
             futureInitialMargin: document.getElementById('futureInitialMargin'),
             futureMaintenanceMargin: document.getElementById('futureMaintenanceMargin'),
@@ -2724,7 +2780,7 @@
             for (const node of document.querySelectorAll('.future-only')) node.hidden = !isFuture;
             el.chartTitle.textContent = isFuture
                 ? '계좌평가액과 유지증거금 시나리오'
-                : '수익/손실 차트 (1계약)';
+                : '옵션 프리미엄 재매도 순손익 (1계약)';
         }
 
         function applySavedFutureInputs(product) {
@@ -3220,6 +3276,12 @@
             }
 
             const positionMultiplier = multiplier * contracts;
+            const oneContractNotional = referencePrice * multiplier;
+            const oneContractInitialMargin = oneContractNotional * (initialMarginRate / 100);
+            const oneContractMaintenanceMargin = oneContractNotional * (maintenanceMarginRate / 100);
+            const minimumBoundaryBuffer = oneContractInitialMargin - oneContractMaintenanceMargin;
+            const minimumBoundaryPrice = entryPrice - (directionSign * (minimumBoundaryBuffer / multiplier));
+            const minimumBoundaryMovePercent = ((minimumBoundaryPrice - entryPrice) / entryPrice) * 100;
             const notional = referencePrice * positionMultiplier;
             const initialMargin = notional * (initialMarginRate / 100);
             const maintenanceMargin = notional * (maintenanceMarginRate / 100);
@@ -3238,6 +3300,11 @@
                 directionSign,
                 contracts,
                 positionMultiplier,
+                oneContractNotional,
+                oneContractInitialMargin,
+                oneContractMaintenanceMargin,
+                minimumBoundaryPrice,
+                minimumBoundaryMovePercent,
                 notional,
                 initialMargin,
                 maintenanceMargin,
@@ -3277,7 +3344,38 @@
             return `${formatAmount(quoteValue, product.displayDecimals)} × ${formatAmount(v, vDigits)} = ${formatCurrencyValue(quoteValue * v, currency, amountDigits)}`;
         }
 
-        function updateChart(buyPrice, product, totalFee, targetProfitPrice) {
+        // OPTION_PRICING_START
+        function calculateOptionFee(transactionAmount, feePolicy) {
+            if (feePolicy?.type === 'percent') {
+                return transactionAmount * (Number(feePolicy.rate) / 100);
+            }
+            return Number(feePolicy?.amount) || 0;
+        }
+
+        function calculateOptionNetProfit(buyPrice, sellPrice, product, feePolicy) {
+            const valuePerQuoteUnit = Number(product.valuePerQuoteUnit);
+            const buyAmount = buyPrice * valuePerQuoteUnit;
+            const sellAmount = sellPrice * valuePerQuoteUnit;
+            return sellAmount
+                - calculateOptionFee(sellAmount, feePolicy)
+                - buyAmount
+                - calculateOptionFee(buyAmount, feePolicy);
+        }
+
+        function calculateOptionExitPrice(buyPrice, product, feePolicy, targetProfitAmount = 0) {
+            const valuePerQuoteUnit = Number(product.valuePerQuoteUnit);
+            const buyAmount = buyPrice * valuePerQuoteUnit;
+            const buyFee = calculateOptionFee(buyAmount, feePolicy);
+            if (feePolicy?.type === 'percent') {
+                const sellRate = Number(feePolicy.rate) / 100;
+                return (buyAmount + buyFee + targetProfitAmount) / (valuePerQuoteUnit * (1 - sellRate));
+            }
+            const sellFee = Number(feePolicy?.amount) || 0;
+            return (buyAmount + buyFee + targetProfitAmount + sellFee) / valuePerQuoteUnit;
+        }
+        // OPTION_PRICING_END
+
+        function updateChart(buyPrice, product, feePolicy, breakEvenPrice, targetProfitPrice) {
             if (typeof Chart === 'undefined') return;
 
             const ctx = el.chartCanvas.getContext('2d');
@@ -3285,163 +3383,95 @@
 
             if (chart) chart.destroy();
 
-            const valuePerQuoteUnit = product.valuePerQuoteUnit;
-            const points = 20;
-            const minPrice = buyPrice;
-            const maxPrice = Math.max(targetProfitPrice, buyPrice * 3);
-
-            const data = [];
-            const labels = [];
-
-            for (let i = 0; i <= points; i++) {
-                const price = minPrice + (maxPrice - minPrice) * (i / points);
-                const profit = (price - buyPrice) * valuePerQuoteUnit - totalFee;
-                data.push(profit);
-                labels.push(price.toFixed(product.displayDecimals));
+            const points = 40;
+            const maxPrice = Math.max(targetProfitPrice * 1.2, breakEvenPrice * 1.25, buyPrice * 3);
+            const priceValues = [];
+            for (let index = 0; index <= points; index += 1) {
+                priceValues.push(maxPrice * (index / points));
             }
-
+            priceValues.push(0, buyPrice, breakEvenPrice, targetProfitPrice);
+            const uniquePrices = Array.from(new Set(
+                priceValues.map((value) => Number(value.toPrecision(12))),
+            )).sort((left, right) => left - right);
+            const profitAt = (price) => calculateOptionNetProfit(buyPrice, price, product, feePolicy);
             const currencyLabel = getCurrencyDisplayName(product.currency);
-            const targetIndex = labels.reduce((closestIndex, label, idx) => {
-                const labelValue = Number(label);
-                if (!Number.isFinite(labelValue)) return closestIndex;
-                const currentDiff = Math.abs(labelValue - targetProfitPrice);
-                const closestLabel = Number(labels[closestIndex]);
-                const closestDiff = Math.abs(closestLabel - targetProfitPrice);
-                return currentDiff < closestDiff ? idx : closestIndex;
-            }, 0);
-            const targetLabel = labels[targetIndex] ?? targetProfitPrice.toFixed(product.displayDecimals);
-            const targetUnit = product.quoteUnitLabel ? ` ${product.quoteUnitLabel}` : '';
-            const targetLabelText = `가격: ${targetLabel}${targetUnit}`;
-
-            const targetLinePlugin = {
-                id: 'targetLine',
-                afterEvent(chart, args, pluginOptions) {
-                    const { event } = args;
-                    if (!event) return;
-                    const { chartArea, scales } = chart;
-                    if (!chartArea || !scales?.x) return;
-                    if (!Number.isFinite(pluginOptions?.targetIndex)) return;
-
-                    if (event.type === 'mouseout' || event.type === 'mouseleave') {
-                        if (chart.$targetLineHover) {
-                            chart.$targetLineHover = false;
-                            chart.draw();
-                        }
-                        return;
-                    }
-
-                    const x = scales.x.getPixelForTick(pluginOptions.targetIndex);
-                    if (!Number.isFinite(x)) return;
-
-                    const tolerance = Number.isFinite(pluginOptions.hoverTolerance) ? pluginOptions.hoverTolerance : 6;
-                    const withinX = Math.abs(event.x - x) <= tolerance;
-                    const withinY = event.y >= chartArea.top && event.y <= chartArea.bottom;
-                    const isHover = withinX && withinY;
-
-                    if (chart.$targetLineHover !== isHover) {
-                        chart.$targetLineHover = isHover;
-                        chart.draw();
-                    }
-                },
-                afterDatasetsDraw(chart, args, pluginOptions) {
-                    const { chartArea, scales } = chart;
-                    if (!chartArea || !scales?.x) return;
-                    if (!Number.isFinite(pluginOptions?.targetIndex)) return;
-
-                    const x = scales.x.getPixelForTick(pluginOptions.targetIndex);
-                    if (!Number.isFinite(x)) return;
-
-                    const { ctx } = chart;
-                    ctx.save();
-                    ctx.strokeStyle = pluginOptions.color || '#ef4444';
-                    ctx.lineWidth = 2;
-                    ctx.setLineDash([6, 4]);
-                    ctx.beginPath();
-                    ctx.moveTo(x, chartArea.top);
-                    ctx.lineTo(x, chartArea.bottom);
-                    ctx.stroke();
-                    ctx.restore();
-
-                    if (!chart.$targetLineHover || !pluginOptions?.label) return;
-
-                    const label = String(pluginOptions.label);
-                    const paddingX = 6;
-                    const paddingY = 4;
-                    ctx.save();
-                    ctx.font = '12px -apple-system, BlinkMacSystemFont, \"Segoe UI\", Roboto, sans-serif';
-                    ctx.textBaseline = 'middle';
-                    const textWidth = ctx.measureText(label).width;
-                    const boxWidth = textWidth + paddingX * 2;
-                    const boxHeight = 12 + paddingY * 2;
-                    let boxX = x - (boxWidth / 2);
-                    const boxY = chartArea.top + 6;
-
-                    if (boxX < chartArea.left) boxX = chartArea.left;
-                    if (boxX + boxWidth > chartArea.right) boxX = chartArea.right - boxWidth;
-
-                    ctx.fillStyle = pluginOptions.backgroundColor || 'rgba(17, 24, 39, 0.92)';
-                    ctx.strokeStyle = pluginOptions.color || '#ef4444';
-                    ctx.lineWidth = 1;
-                    ctx.beginPath();
-                    ctx.rect(boxX, boxY, boxWidth, boxHeight);
-                    ctx.fill();
-                    ctx.stroke();
-
-                    ctx.fillStyle = pluginOptions.labelColor || '#fecaca';
-                    ctx.fillText(label, boxX + paddingX, boxY + (boxHeight / 2));
-                    ctx.restore();
-                },
-            };
+            const markerDataset = (label, price, color) => ({
+                label,
+                data: [{ x: price, y: profitAt(price) }],
+                borderColor: color,
+                backgroundColor: color,
+                pointRadius: 4,
+                pointHoverRadius: 6,
+                showLine: false,
+            });
 
             chart = new Chart(ctx, {
                 type: 'line',
-                plugins: [targetLinePlugin],
                 data: {
-                    labels,
                     datasets: [
                         {
-                            label: `수익/손실 (${currencyLabel})`,
-                            data,
-                            borderColor: '#8884d8',
-                            backgroundColor: 'rgba(136, 132, 216, 0.1)',
+                            label: `1계약 순손익 (${currencyLabel})`,
+                            data: uniquePrices.map((price) => ({ x: price, y: profitAt(price) })),
+                            borderColor: '#4cc9f0',
                             borderWidth: 2,
-                            fill: true,
+                            fill: false,
+                            pointRadius: 0,
                         },
+                        markerDataset('매수가', buyPrice, '#edf5ff'),
+                        markerDataset('손익분기', breakEvenPrice, '#ffca58'),
+                        markerDataset('목표가', targetProfitPrice, '#ff7b7b'),
                     ],
                 },
                 options: {
                     responsive: true,
                     maintainAspectRatio: false,
+                    interaction: { intersect: false, mode: 'nearest' },
                     plugins: {
-                        legend: {
-                            labels: { color: 'white' },
-                        },
-                        targetLine: {
-                            targetIndex,
-                            color: '#ef4444',
-                            label: targetLabelText,
-                            labelColor: '#fecaca',
-                            hoverTolerance: 6,
+                        legend: { labels: { color: '#edf5ff' } },
+                        tooltip: {
+                            callbacks: {
+                                title(items) {
+                                    const price = items[0]?.parsed?.x;
+                                    return `옵션가격 ${formatAmount(price, product.displayDecimals)} ${product.quoteUnitLabel}`;
+                                },
+                                label(context) {
+                                    return `${context.dataset.label}: ${formatAmount(context.parsed.y, 2)} ${currencyLabel}`;
+                                },
+                            },
                         },
                     },
                     scales: {
                         x: {
+                            type: 'linear',
+                            min: 0,
+                            max: maxPrice,
                             title: {
                                 display: true,
-                                text: `가격 (${product.quoteUnitLabel})`,
-                                color: 'white',
+                                text: `재매도 옵션가격 (${product.quoteUnitLabel})`,
+                                color: '#edf5ff',
                             },
-                            ticks: { color: 'white' },
-                            grid: { color: 'rgba(255, 255, 255, 0.1)' },
+                            ticks: {
+                                color: '#91a6bf',
+                                maxTicksLimit: 8,
+                                callback(value) { return formatAmount(value, product.displayDecimals); },
+                            },
+                            grid: { color: 'rgba(145, 166, 191, 0.10)' },
                         },
                         y: {
                             title: {
                                 display: true,
-                                text: `수익/손실 (${currencyLabel})`,
-                                color: 'white',
+                                text: `순손익 (${currencyLabel})`,
+                                color: '#edf5ff',
                             },
-                            ticks: { color: 'white' },
-                            grid: { color: 'rgba(255, 255, 255, 0.1)' },
+                            ticks: { color: '#91a6bf' },
+                            grid: {
+                                color(context) {
+                                    return Number(context.tick.value) === 0
+                                        ? 'rgba(237, 245, 255, 0.5)'
+                                        : 'rgba(145, 166, 191, 0.10)';
+                                },
+                                lineWidth(context) { return Number(context.tick.value) === 0 ? 2 : 1; },
+                            },
                         },
                     },
                 },
@@ -3455,34 +3485,49 @@
             if (chart) chart.destroy();
 
             const entryPrice = Number(input.entryPrice);
+            const currentPrice = Number(input.currentPrice);
             const accountEquity = Number(input.accountEquity);
             const costs = Number(input.costs);
             const tickSize = Number(product.tickSize) || (entryPrice * 0.001);
-            const boundaryDistance = Math.abs(result.boundaryPrice - entryPrice);
-            const span = Math.max(entryPrice * 0.15, boundaryDistance * 1.25, tickSize * 10);
-            const minPrice = Math.max(tickSize, entryPrice - span);
-            const maxPrice = entryPrice + span;
+            const visibleAnchors = [entryPrice, currentPrice];
+            if (result.boundaryPrice > 0) visibleAnchors.push(result.boundaryPrice);
+            const anchorMin = Math.min(...visibleAnchors);
+            const anchorMax = Math.max(...visibleAnchors);
+            const padding = Math.max(entryPrice * 0.1, (anchorMax - anchorMin) * 0.25, tickSize * 10);
+            const minPrice = Math.max(tickSize, anchorMin - padding);
+            const maxPrice = anchorMax + padding;
             const points = 30;
-            const labels = [];
-            const equityData = [];
-            const maintenanceData = [];
+            const scenarioPrices = [];
 
             for (let index = 0; index <= points; index += 1) {
-                const price = minPrice + ((maxPrice - minPrice) * (index / points));
-                const pnl = (price - entryPrice) * result.positionMultiplier * result.directionSign;
-                labels.push(price.toFixed(product.displayDecimals));
-                equityData.push(accountEquity + pnl - costs);
-                maintenanceData.push(result.maintenanceMargin);
+                scenarioPrices.push(minPrice + ((maxPrice - minPrice) * (index / points)));
             }
+            scenarioPrices.push(entryPrice, currentPrice);
+            if (result.boundaryPrice > 0) scenarioPrices.push(result.boundaryPrice);
+            const uniquePrices = Array.from(new Set(
+                scenarioPrices.map((value) => Number(value.toPrecision(12))),
+            )).sort((left, right) => left - right);
+            const equityAt = (price) => {
+                const pnl = (price - entryPrice) * result.positionMultiplier * result.directionSign;
+                return accountEquity + pnl - costs;
+            };
+            const markerDataset = (label, price, color) => ({
+                label,
+                data: [{ x: price, y: equityAt(price) }],
+                borderColor: color,
+                backgroundColor: color,
+                pointRadius: 4,
+                pointHoverRadius: 6,
+                showLine: false,
+            });
 
             chart = new Chart(ctx, {
                 type: 'line',
                 data: {
-                    labels,
                     datasets: [
                         {
                             label: '추정 계좌평가액',
-                            data: equityData,
+                            data: uniquePrices.map((price) => ({ x: price, y: equityAt(price) })),
                             borderColor: '#4cc9f0',
                             backgroundColor: 'rgba(76, 201, 240, 0.10)',
                             borderWidth: 2,
@@ -3490,13 +3535,18 @@
                             pointRadius: 0,
                         },
                         {
-                            label: '유지증거금',
-                            data: maintenanceData,
+                            label: '입력 기준가격 기준 유지증거금(고정)',
+                            data: uniquePrices.map((price) => ({ x: price, y: result.maintenanceMargin })),
                             borderColor: '#ffca58',
                             borderDash: [7, 5],
                             borderWidth: 2,
                             pointRadius: 0,
                         },
+                        markerDataset('진입가격', entryPrice, '#edf5ff'),
+                        markerDataset('현재가격', currentPrice, '#55d6a0'),
+                        ...(result.boundaryPrice > 0
+                            ? [markerDataset('현재 계좌 기준 미달 경계', result.boundaryPrice, '#ff7b7b')]
+                            : []),
                     ],
                 },
                 options: {
@@ -3507,6 +3557,10 @@
                         legend: { labels: { color: '#edf5ff' } },
                         tooltip: {
                             callbacks: {
+                                title(items) {
+                                    const price = items[0]?.parsed?.x;
+                                    return `선물가격 ${formatAmount(price, product.displayDecimals)} ${product.quoteUnitLabel}`;
+                                },
                                 label(context) {
                                     return `${context.dataset.label}: ${formatKrw(context.parsed.y)}원`;
                                 },
@@ -3515,8 +3569,15 @@
                     },
                     scales: {
                         x: {
+                            type: 'linear',
+                            min: minPrice,
+                            max: maxPrice,
                             title: { display: true, text: `선물가격 (${product.quoteUnitLabel})`, color: '#edf5ff' },
-                            ticks: { color: '#91a6bf', maxTicksLimit: 8 },
+                            ticks: {
+                                color: '#91a6bf',
+                                maxTicksLimit: 8,
+                                callback(value) { return formatAmount(value, product.displayDecimals); },
+                            },
                             grid: { color: 'rgba(145, 166, 191, 0.10)' },
                         },
                         y: {
@@ -3535,6 +3596,10 @@
         function resetFuturesResults() {
             for (const node of [
                 el.futureNotional,
+                el.futureOneContractMargin,
+                el.futureOneContractMarginDetail,
+                el.futureMinimumBoundary,
+                el.futureMinimumBoundaryDetail,
                 el.futureInitialMargin,
                 el.futureMaintenanceMargin,
                 el.futureMarginBuffer,
@@ -3575,6 +3640,17 @@
             }
 
             const money = (value) => `${formatKrw(value)}원`;
+            const moveDirection = result.minimumBoundaryMovePercent < 0 ? '하락' : '상승';
+            const movePercent = Math.abs(result.minimumBoundaryMovePercent);
+            el.futureOneContractMargin.textContent = money(result.oneContractInitialMargin);
+            el.futureOneContractMarginDetail.textContent = `명목금액 ${money(result.oneContractNotional)} × 위탁증거금률 ${formatAmount(Number(input.initialMarginRate), 2)}%`;
+            if (result.minimumBoundaryPrice <= 0) {
+                el.futureMinimumBoundary.textContent = '가격 0 이상에서는 미달 없음';
+            } else {
+                el.futureMinimumBoundary.textContent = `${formatAmount(result.minimumBoundaryPrice, selectedProduct.displayDecimals)} ${selectedProduct.quoteUnitLabel}`;
+            }
+            const positionLabel = input.direction === 'short' ? '매도(숏)' : '매수(롱)';
+            el.futureMinimumBoundaryDetail.textContent = `${positionLabel} 기준 ${moveDirection} ${formatAmount(movePercent, 2)}% · 1계약·비용 제외`;
             el.futureNotional.textContent = money(result.notional);
             el.futureInitialMargin.textContent = `${money(result.initialMargin)} · 레버리지 ${formatAmount(result.leverage, 2)}배`;
             el.futureMaintenanceMargin.textContent = money(result.maintenanceMargin);
@@ -3582,7 +3658,9 @@
             el.futurePnl.textContent = money(result.pnl);
             el.futureEstimatedEquity.textContent = money(result.estimatedEquity);
             el.futureSensitivity.textContent = `${money(result.tickValue)} / ${money(result.onePercentPnl)}`;
-            el.futureBoundaryPrice.textContent = `${formatAmount(result.boundaryPrice, selectedProduct.displayDecimals)} ${selectedProduct.quoteUnitLabel}`;
+            el.futureBoundaryPrice.textContent = result.boundaryPrice <= 0
+                ? '가격 0 이상에서는 미달 없음'
+                : `${formatAmount(result.boundaryPrice, selectedProduct.displayDecimals)} ${selectedProduct.quoteUnitLabel}`;
 
             const isDanger = result.marginBuffer < 0;
             el.futureRiskStatus.classList.toggle('danger', isDanger);
@@ -3598,7 +3676,7 @@
             el.chartUnavailable.style.display = 'none';
             el.chartCanvas.style.display = 'block';
             const directionLabel = input.direction === 'short' ? '매도(숏)' : '매수(롱)';
-            el.chartContext.textContent = `${directionLabel} ${result.contracts}계약 · 가격별 추정 계좌평가액과 유지증거금 비교`;
+            el.chartContext.textContent = `${directionLabel} ${result.contracts}계약 · 진입가·현재가·미달 경계 표시 · 유지증거금은 입력 기준가격 기준으로 고정`;
             updateFuturesChart(selectedProduct, result, input);
         }
 
@@ -3637,12 +3715,7 @@
 
             const profitPercentage = Number(el.profitPercentage.value) || 0;
 
-            let feePerContract = 0;
-            if (feePolicy.type === 'percent') {
-                feePerContract = purchaseAmount * (feePolicy.rate / 100);
-            } else {
-                feePerContract = feePolicy.amount;
-            }
+            const feePerContract = calculateOptionFee(purchaseAmount, feePolicy);
 
             const feeDisplayValue = isLocalCurrency(selectedProduct.currency)
                 ? Math.round(feePerContract)
@@ -3651,14 +3724,19 @@
             el.feePerContract.value = formatAmount(feeDisplayValue, feeDigits);
 
             const oneWayFee = feePerContract;
-            const totalFee = oneWayFee * 2;
+            const totalFee = oneWayFee + calculateOptionFee(purchaseAmount, feePolicy);
             const feePercentage = purchaseAmount > 0 ? (totalFee / purchaseAmount) * 100 : 0;
 
-            const breakEvenPrice = quoteValue + (totalFee / selectedProduct.valuePerQuoteUnit);
+            const breakEvenPrice = calculateOptionExitPrice(quoteValue, selectedProduct, feePolicy, 0);
             const breakEvenPercentage = ((breakEvenPrice / quoteValue - 1) * 100);
 
-            const profitMultiple = 1 + (profitPercentage / 100);
-            const targetProfitPrice = ((purchaseAmount * profitMultiple) + totalFee) / selectedProduct.valuePerQuoteUnit;
+            const targetProfitAmount = purchaseAmount * (profitPercentage / 100);
+            const targetProfitPrice = calculateOptionExitPrice(
+                quoteValue,
+                selectedProduct,
+                feePolicy,
+                targetProfitAmount,
+            );
             const targetProfitPercentage = ((targetProfitPrice / quoteValue - 1) * 100);
 
             el.oneWayFee.textContent = formatAmount(oneWayFee, 2);
@@ -3680,8 +3758,8 @@
 
             el.chartUnavailable.style.display = 'none';
             el.chartCanvas.style.display = 'block';
-            el.chartContext.textContent = `매도 시점 옵션가격 변화에 따른 손익(수수료 반영) · 통화: ${getCurrencyDisplayName(selectedProduct.currency)}`;
-            updateChart(quoteValue, selectedProduct, totalFee, targetProfitPrice);
+            el.chartContext.textContent = `옵션 자체의 재매도 가격별 순손익 · 기초자산 만기손익 차트 아님 · 통화: ${getCurrencyDisplayName(selectedProduct.currency)}`;
+            updateChart(quoteValue, selectedProduct, feePolicy, breakEvenPrice, targetProfitPrice);
         }
 
         function bootstrap() {
