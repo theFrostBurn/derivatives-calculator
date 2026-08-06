@@ -18,8 +18,18 @@ this.optionPricing = {
     calculateOptionExitPrice,
     calculateOptionFee,
     calculateOptionNetProfit,
+    assessOptionEntryCost,
 };`, context);
 const pricing = context.optionPricing;
+
+test('옵션 진입 비용 점검은 같은 가격 재매도의 왕복 수수료 비중을 계산한다', () => {
+    const product = { valuePerQuoteUnit: 100 };
+    const assessment = pricing.assessOptionEntryCost(0.05, product, { type: 'flat', amount: 2.49 });
+
+    assert.equal(assessment.buyAmount, 5);
+    assert.equal(assessment.unchangedExitLoss, 4.98);
+    assert.ok(Math.abs(assessment.feeDragPercent - 99.6) < 1e-12);
+});
 
 test('정액 수수료 옵션은 진입·청산 수수료를 모두 반영한다', () => {
     const product = { valuePerQuoteUnit: 50 };
@@ -50,5 +60,9 @@ test('옵션 차트는 0원 손실 구간과 정확한 기준점을 숫자형 �
     assert.match(chartMatch[0], /priceValues\.push\(0, buyPrice, breakEvenPrice, targetProfitPrice\)/);
     assert.match(chartMatch[0], /type: 'linear'/);
     assert.match(chartMatch[0], /markerDataset\('손익분기'/);
+    assert.match(chartMatch[0], /수수료 전 손익/);
+    assert.match(chartMatch[0], /수수료 후 순손익/);
+    assert.match(chartMatch[0], /fill: '-1'/);
+    assert.match(html, /현재 종목 입력값을 기본값으로 저장/);
     assert.match(html, /chart\.js@4\.4\.9\/dist\/chart\.umd\.min\.js/);
 });
