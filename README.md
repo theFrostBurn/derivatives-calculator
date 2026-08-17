@@ -79,7 +79,8 @@ node --test .\tests\expiry.test.cjs .\tests\futures.test.cjs .\tests\options.tes
 - `valuePerQuoteUnit`: 가격 1단위당 계약가치
 - `tickSize`, `tickValue`: 선물 최소 가격변동과 1계약 틱 가치
 - `expiryRuleId`: 만기 계산 규칙
-- `marginSnapshot`: 기준일·출처가 필요한 선물 증거금 예시
+- `marginSnapshot`: 기준일·증권사·출처가 필요한 선물 증거금 예시
+- `parseMode`: 일반 숫자·채권 32분할·농산물 센트 표기 구분
 
 옵션 프리미엄과 선물 명목금액은 의미가 다르므로 계산 흐름을 분리합니다.
 
@@ -93,6 +94,25 @@ node --test .\tests\expiry.test.cjs .\tests\futures.test.cjs .\tests\options.tes
 ```
 
 방향부호는 롱 `+1`, 숏 `-1`입니다.
+
+### 상품 정의 변경 원칙
+
+- `id`는 표시 코드가 중복되는 상품을 구분하고 `localStorage` 키로도 사용하므로 상품마다 고유하게 유지합니다.
+- `instrumentType`은 `option` 또는 `future`, `pricingModel`은 `premium` 또는 `futuresMargin`으로 구분합니다.
+- 표시 단위를 변경할 때는 `valuePerQuoteUnit`, `displayDecimals`, `quoteUnitLabel`을 함께 맞춥니다.
+- 선물 증거금률과 기준가격은 변동 데이터이므로 `marginSnapshot`에 기준일·증권사·출처를 기록하고 화면에서 수정 가능하게 유지합니다.
+- `PRODUCTS`를 변경하면 참고표인 `docs/파생상품_계약사양.md`도 함께 갱신합니다.
+- `parseMode`는 일반 숫자 `number`, 채권 32분할 `bond32`, 농산물 센트/부셸 `agCents`를 사용합니다.
+
+## 개발 구조와 변경 원칙
+
+- 별도 빌드 도구나 패키지 매니저 없이 `index.html` 하나에 HTML·CSS·JavaScript를 인라인으로 구성합니다.
+- 파싱·계산·차트 갱신은 기존 `parse*`, `recalculate`, `updateChart` 계열 함수 분리 방식을 유지합니다.
+- 옵션과 선물의 계산 모델을 섞지 않고 `instrumentType`과 `pricingModel`에 따라 UI와 계산 흐름을 분리합니다.
+- 로컬 저장소 접근은 `safeGetItem`과 `safeSetItem`으로 감싸 브라우저 저장소 예외가 앱 전체를 중단시키지 않게 합니다.
+- 차트는 고정 버전의 Chart.js CDN을 사용합니다. 차트 사용 여부나 로딩 방식을 변경하면 CDN과 오프라인 안내 문구를 함께 조정합니다.
+- 환율은 `api.frankfurter.app`, `open.er-api.com` 순서로 조회하며 네트워크 실패 시 수동 입력을 계속 사용할 수 있어야 합니다.
+- 인증이 필요한 KRX 종가 API는 브라우저에서 직접 호출하지 않고 GitHub Actions에서 조회해 인증키 없는 공개 JSON만 배포합니다.
 
 ## 증거금 데이터 주의사항
 
@@ -123,12 +143,14 @@ node --test .\tests\expiry.test.cjs .\tests\futures.test.cjs .\tests\options.tes
 - `450'25` → 450 + 25/100
 - `450 2/8` → 450 + 2/8
 
-## 환율과 로컬 저장
+## 환율·수수료와 로컬 저장
 
 - 환율 기본값: USD 1,350원, HKD 175원, KRW 1원
 - 자동 환율 출처: `api.frankfurter.app`, `open.er-api.com`
 - 자동·수동 환율은 통화별로 브라우저 `localStorage`에 저장하며 캐시 TTL은 6시간
-- KRW 상품은 환율 미적용
+- KRW 상품은 환율을 적용하지 않고 환율 입력·조회 UI를 숨기며 KRW 1로 계산
+- 편도 수수료 기본 추정값은 KOSPI200·미니 KOSPI200·KOSDAQ150·한국 개별주식 옵션은 프리미엄의 0.15%, 그 외 옵션은 2.49 `product.currency`
+- 수수료는 앱의 비교용 기본 추정값이므로 실제 계좌 수수료와 다를 수 있으며 주문 전 증권사 수수료를 확인
 - 저장 키: `derivativesCalculator.*`
 
 ## 전일 KRX 종가 자동 갱신 설정
