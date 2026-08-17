@@ -5,9 +5,6 @@ on:
     - cron: '30 5 * * 1-5'
   workflow_dispatch:
 
-permissions:
-  contents: write
-
 concurrency:
   group: update-market-close
   cancel-in-progress: false
@@ -15,14 +12,19 @@ concurrency:
 jobs:
   update:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pages: write
+      id-token: write
     steps:
       - name: 저장소 체크아웃
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Node.js 설정
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: '22'
+          package-manager-cache: false
 
       - name: 공식 전일 종가 파일 생성
         env:
@@ -48,3 +50,33 @@ jobs:
           git add data/market-close.json
           git commit -m "데이터: 전일 KRX 종가 갱신"
           git push
+
+      - name: GitHub Pages 설정
+        uses: actions/configure-pages@v6
+
+      - name: 공개 종가 파일 준비
+        shell: bash
+        run: |
+          mkdir -p pages-market-close
+          cp data/market-close.json pages-market-close/market-close.json
+
+      - name: 공개 종가 파일 업로드
+        uses: actions/upload-pages-artifact@v5
+        with:
+          path: pages-market-close
+
+  deploy:
+    name: 종가 JSON 공개 배포
+    needs: update
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: GitHub Pages 배포
+        id: deployment
+        uses: actions/deploy-pages@v5

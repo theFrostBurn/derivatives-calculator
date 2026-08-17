@@ -60,7 +60,22 @@ this.fetchAndApplyMarketClose = fetchAndApplyMarketClose;`, context);
 test('선물 기준가격 옆에 전일 KRX 종가 조회 버튼과 상태 영역을 표시한다', () => {
     assert.match(html, /id="marketCloseFetchBtn"[^>]*>전일 KRX 종가 불러오기<\/button>/);
     assert.match(html, /id="marketCloseStatus" role="status" aria-live="polite"/);
-    assert.match(html, /MARKET_CLOSE_DATA_URL = '\.\/data\/market-close\.json'/);
+    assert.match(
+        html,
+        /MARKET_CLOSE_DATA_URL = 'https:\/\/thefrostburn\.github\.io\/derivatives-calculator\/market-close\.json'/,
+    );
+});
+
+test('종가 자동 갱신 워크플로는 공개용 종가 JSON 하나만 GitHub Pages에 배포한다', () => {
+    const workflowPath = path.join(__dirname, '..', '.github', 'workflows', 'update-market-close.yml');
+    const workflow = fs.readFileSync(workflowPath, 'utf8');
+
+    assert.match(workflow, /uses: actions\/configure-pages@v6/);
+    assert.match(workflow, /uses: actions\/upload-pages-artifact@v5/);
+    assert.match(workflow, /cp data\/market-close\.json pages-market-close\/market-close\.json/);
+    assert.match(workflow, /path: pages-market-close/);
+    assert.match(workflow, /uses: actions\/deploy-pages@v5/);
+    assert.doesNotMatch(workflow, /path: (?:['"]?\.['"]?|data)\s*$/m);
 });
 
 test('공식 종가를 현재 선물의 기준가격에 적용하고 다시 계산한다', async () => {

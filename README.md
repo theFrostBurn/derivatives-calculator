@@ -45,7 +45,7 @@
 - `tests/fx.test.cjs`: 환율 캐시와 비동기 요청 회귀 테스트
 - `tests/market-close.test.cjs`: 전일 종가 조회·응답 경합·자료 생성 회귀 테스트
 - `scripts/update-market-close.mjs`: 공식 주식·지수 종가를 `data/market-close.json`으로 생성
-- `.github/workflows/update-market-close.yml`: 평일 오후 종가 파일 자동 갱신
+- `.github/workflows/update-market-close.yml`: 평일 오후 종가 파일 자동 갱신 및 종가 JSON 전용 GitHub Pages 배포
 
 ## 실행 방법
 
@@ -133,13 +133,18 @@ node --test .\tests\expiry.test.cjs .\tests\futures.test.cjs .\tests\options.tes
 
 ## 전일 KRX 종가 자동 갱신 설정
 
-정적 페이지에 인증키가 노출되지 않도록 GitHub Actions가 공식 API를 호출하고, 브라우저는 공개 결과 파일인 `data/market-close.json`만 읽습니다.
+정적 페이지에 인증키가 노출되지 않도록 GitHub Actions가 공식 API를 호출하고, 생성된 `market-close.json` 하나만 GitHub Pages에 배포합니다. 로컬 HTML의 버튼은 공개 결과 파일인 `https://thefrostburn.github.io/derivatives-calculator/market-close.json`만 읽으므로 매일 `git pull`할 필요가 없습니다.
 
 1. 공공데이터포털에서 [금융위원회 주식시세정보](https://www.data.go.kr/data/15094808/openapi.do)와 [금융위원회 지수시세정보](https://www.data.go.kr/data/15094807/openapi.do)를 활용 신청합니다.
 2. GitHub 저장소의 `Settings → Secrets and variables → Actions`에 `DATA_GO_KR_SERVICE_KEY`라는 Repository secret을 추가합니다.
-3. Actions의 `전일 KRX 종가 갱신` 워크플로를 한 번 수동 실행합니다.
+3. GitHub 저장소의 `Settings → Pages → Build and deployment`에서 Source를 `GitHub Actions`로 지정합니다.
+4. Actions의 `전일 KRX 종가 갱신` 워크플로를 한 번 수동 실행합니다.
 
-이후 워크플로는 평일 한국시간 오후 2시 30분에 실행되어 삼성전자·SK하이닉스·코스피200의 동일 기준일 종가만 반영합니다. 공식 API는 실시간 시세가 아니며 기준일 다음 영업일 오후 1시 이후 갱신되므로, 오전에는 최신 전일 자료가 아직 없을 수 있습니다. 인증키는 결과 파일이나 브라우저 코드에 기록되지 않습니다.
+이후 워크플로는 평일 한국시간 오후 2시 30분에 실행되어 삼성전자·SK하이닉스·코스피200의 동일 기준일 종가만 반영하고 공개 JSON을 자동 배포합니다. 공식 API는 실시간 시세가 아니며 기준일 다음 영업일 오후 1시 이후 갱신되므로, 오전에는 최신 전일 자료가 아직 없을 수 있습니다. 인증키는 결과 파일이나 브라우저 코드에 기록되지 않으며 계산기 전체 소스가 아니라 `market-close.json` 하나만 Pages 배포 대상입니다.
+
+로컬 `index.html`을 직접 연 상태에서도 버튼은 공개 JSON 주소를 조회하도록 구성되어 있습니다. 일부 브라우저의 `file://` 네트워크 정책이 조회를 막는 경우에만 `python -m http.server 8000`으로 실행하세요.
+
+현재 저장소는 비공개이므로 GitHub Pages를 사용하려면 비공개 저장소의 Pages를 지원하는 GitHub 플랜이 필요합니다. 배포 대상은 종가 JSON뿐이지만 해당 Pages 주소는 공개 데이터 주소로 사용합니다.
 
 로컬에서 직접 갱신할 때는 PowerShell 7에서 다음과 같이 실행합니다.
 
