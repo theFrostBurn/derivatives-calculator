@@ -44,6 +44,7 @@
 - `tests/options.test.cjs`: 옵션 수수료·손익분기·차트 범위 회귀 테스트
 - `tests/fx.test.cjs`: 환율 캐시와 비동기 요청 회귀 테스트
 - `tests/market-close.test.cjs`: 전일 종가 조회·응답 경합·자료 생성 회귀 테스트
+- `tests/defaults.test.cjs`: 모드별 기본 종목 저장·복원 회귀 테스트
 - `scripts/update-market-close.mjs`: 공식 주식·지수 종가를 `data/market-close.json`으로 생성
 - `.github/workflows/update-market-close.yml`: 평일 오후 종가 파일 자동 갱신 및 종가 JSON 전용 GitHub Pages 배포
 
@@ -66,7 +67,7 @@ http://localhost:8000/
 별도 패키지 설치 없이 Node.js 내장 테스트 러너를 사용합니다.
 
 ```powershell
-node --test .\tests\expiry.test.cjs .\tests\futures.test.cjs .\tests\options.test.cjs .\tests\fx.test.cjs .\tests\market-close.test.cjs
+node --test .\tests\expiry.test.cjs .\tests\futures.test.cjs .\tests\options.test.cjs .\tests\fx.test.cjs .\tests\market-close.test.cjs .\tests\defaults.test.cjs
 ```
 
 ## 데이터 모델
@@ -118,7 +119,7 @@ node --test .\tests\expiry.test.cjs .\tests\futures.test.cjs .\tests\options.tes
 
 기준가격과 증거금률은 고정 계약 사양이 아닙니다. 앱에 포함된 4개 선물의 수치는 조회일이 남아 있지 않은 과거 삼성증권 HTS 전사값을 재현한 예시입니다. 화면에서 값을 수정할 수 있으며, 실제 주문 전 당일 HTS 수치를 다시 입력해야 합니다.
 
-`전일 KRX 종가 불러오기`는 기초자산의 KRX 본장 종가를 편의상 입력하는 기능입니다. 배당락·액면분할 등으로 증권사가 적용한 기준가격과 다를 수 있으므로, 실제 증거금 계산 전 삼성증권 HTS **2225·2206** 화면과 대조해야 합니다. 7일을 넘긴 자료는 자동 적용하지 않고 현재 입력값을 유지합니다.
+`전일 KRX 종가 불러오기`는 기초자산의 KRX 본장 종가를 편의상 입력하고, 현재 계약 수에 필요한 위탁증거금을 `계좌 투입금액`에 함께 반영하는 기능입니다. 배당락·액면분할 등으로 증권사가 적용한 기준가격과 다를 수 있으므로, 실제 증거금 계산 전 삼성증권 HTS **2225·2206** 화면과 대조해야 합니다. 7일을 넘긴 자료는 자동 적용하지 않고 현재 입력값을 유지합니다.
 
 `유지증거금 미달 추정 경계`는 다음을 가정한 단순 계산입니다.
 
@@ -151,6 +152,7 @@ node --test .\tests\expiry.test.cjs .\tests\futures.test.cjs .\tests\options.tes
 - KRW 상품은 환율을 적용하지 않고 환율 입력·조회 UI를 숨기며 KRW 1로 계산
 - 편도 수수료 기본 추정값은 KOSPI200·미니 KOSPI200·KOSDAQ150·한국 개별주식 옵션은 프리미엄의 0.15%, 그 외 옵션은 2.49 `product.currency`
 - 수수료는 앱의 비교용 기본 추정값이므로 실제 계좌 수수료와 다를 수 있으며 주문 전 증권사 수수료를 확인
+- `현재 종목 입력값을 기본값으로 저장`을 누르면 옵션·선물별 기본 종목과 입력값을 함께 저장하며, 탭을 다시 열 때 해당 모드의 저장 종목을 복원하고 새로고침 시 마지막으로 저장한 모드부터 표시
 - 저장 키: `derivativesCalculator.*`
 
 ## 전일 KRX 종가 자동 갱신 설정
@@ -160,13 +162,14 @@ node --test .\tests\expiry.test.cjs .\tests\futures.test.cjs .\tests\options.tes
 1. 공공데이터포털에서 [금융위원회 주식시세정보](https://www.data.go.kr/data/15094808/openapi.do)와 [금융위원회 지수시세정보](https://www.data.go.kr/data/15094807/openapi.do)를 활용 신청합니다.
 2. GitHub 저장소의 `Settings → Secrets and variables → Actions`에 `DATA_GO_KR_SERVICE_KEY`라는 Repository secret을 추가합니다.
 3. GitHub 저장소의 `Settings → Pages → Build and deployment`에서 Source를 `GitHub Actions`로 지정합니다.
-4. Actions의 `전일 KRX 종가 갱신` 워크플로를 한 번 수동 실행합니다.
+4. 저장소의 `Actions → 전일 KRX 종가 갱신 → Run workflow`에서 Branch를 `main`으로 선택해 한 번 수동 실행합니다.
+5. 실행 화면에서 `update`와 `종가 JSON 공개 배포`가 모두 성공했는지 확인한 뒤, [공개 종가 JSON](https://thefrostburn.github.io/derivatives-calculator/market-close.json)이 열리는지 확인합니다.
 
 이후 워크플로는 평일 한국시간 오후 2시 30분에 실행되어 삼성전자·SK하이닉스·코스피200의 동일 기준일 종가만 반영하고 공개 JSON을 자동 배포합니다. 공식 API는 실시간 시세가 아니며 기준일 다음 영업일 오후 1시 이후 갱신되므로, 오전에는 최신 전일 자료가 아직 없을 수 있습니다. 인증키는 결과 파일이나 브라우저 코드에 기록되지 않으며 계산기 전체 소스가 아니라 `market-close.json` 하나만 Pages 배포 대상입니다.
 
 로컬 `index.html`을 직접 연 상태에서도 버튼은 공개 JSON 주소를 조회하도록 구성되어 있습니다. 일부 브라우저의 `file://` 네트워크 정책이 조회를 막는 경우에만 `python -m http.server 8000`으로 실행하세요.
 
-현재 저장소는 비공개이므로 GitHub Pages를 사용하려면 비공개 저장소의 Pages를 지원하는 GitHub 플랜이 필요합니다. 배포 대상은 종가 JSON뿐이지만 해당 Pages 주소는 공개 데이터 주소로 사용합니다.
+현재 저장소는 공개 상태이므로 GitHub Free에서도 Pages를 사용할 수 있습니다. Pages에는 계산기 전체가 아니라 종가 JSON만 공개됩니다.
 
 로컬에서 직접 갱신할 때는 PowerShell 7에서 다음과 같이 실행합니다.
 

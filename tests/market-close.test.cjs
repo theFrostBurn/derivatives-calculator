@@ -29,6 +29,9 @@ function createClientContext() {
     const context = vm.createContext({
         console: { error() {} },
         el: {
+            futureAccountEquity: { value: '450' },
+            futureContracts: { value: '1' },
+            futureInitialMarginRate: { value: '45' },
             futureReferencePrice: { value: '100' },
             marketCloseFetchBtn: { disabled: false },
         },
@@ -48,6 +51,7 @@ function createClientContext() {
             displayDecimals: 0,
             id: 'FUTURE_SAMSUNG',
             instrumentType: 'future',
+            valuePerQuoteUnit: 10,
         },
         setMarketCloseStatus: (message, tone) => state.statuses.push({ message, tone }),
     });
@@ -58,7 +62,9 @@ this.fetchAndApplyMarketClose = fetchAndApplyMarketClose;`, context);
 }
 
 test('선물 기준가격 옆에 전일 KRX 종가 조회 버튼과 상태 영역을 표시한다', () => {
-    assert.match(html, /id="marketCloseFetchBtn"[^>]*>전일 KRX 종가 불러오기<\/button>/);
+    assert.match(html, /class="button data-fetch-button" id="marketCloseFetchBtn"[^>]*>전일 KRX 종가 불러오기<\/button>/);
+    assert.match(html, /class="button data-fetch-button" id="fxFetchBtn"[^>]*>환율 자동 불러오기<\/button>/);
+    assert.match(html, /\.data-fetch-button\s*\{/);
     assert.match(html, /id="marketCloseStatus" role="status" aria-live="polite"/);
     assert.match(
         html,
@@ -78,7 +84,7 @@ test('종가 자동 갱신 워크플로는 공개용 종가 JSON 하나만 GitHu
     assert.doesNotMatch(workflow, /path: (?:['"]?\.['"]?|data)\s*$/m);
 });
 
-test('공식 종가를 현재 선물의 기준가격에 적용하고 다시 계산한다', async () => {
+test('공식 종가를 기준가격과 현재 계약 수의 위탁증거금에 적용하고 다시 계산한다', async () => {
     const fixture = createClientContext();
     const request = fixture.fetchAndApplyMarketClose(true);
     fixture.requests[0].resolve({
@@ -90,12 +96,29 @@ test('공식 종가를 현재 선물의 기준가격에 적용하고 다시 계�
     await request;
 
     assert.equal(fixture.context.el.futureReferencePrice.value, '274500');
+    assert.equal(fixture.context.el.futureAccountEquity.value, '1235250');
     assert.equal(fixture.state.recalculations, 1);
     assert.equal(fixture.context.el.marketCloseFetchBtn.disabled, false);
     assert.deepEqual(fixture.state.statuses.at(-1), {
         message: '2026-08-17 KRX 종가 · 공식 테스트',
         tone: 'success',
     });
+});
+
+test('종가 조회 시 변경된 계약 수와 위탁증거금률을 계좌 투입금액에 반영한다', async () => {
+    const fixture = createClientContext();
+    fixture.context.el.futureContracts.value = '3';
+    fixture.context.el.futureInitialMarginRate.value = '40';
+    const request = fixture.fetchAndApplyMarketClose(true);
+    fixture.requests[0].resolve({
+        items: {
+            FUTURE_SAMSUNG: { asOf: '2026-08-17', close: 274500 },
+        },
+    });
+    await request;
+
+    assert.equal(fixture.context.el.futureAccountEquity.value, '3294000');
+    assert.equal(fixture.state.recalculations, 1);
 });
 
 test('종목 전환 뒤 늦게 도착한 응답은 현재 기준가격을 덮어쓰지 않는다', async () => {
@@ -133,6 +156,7 @@ test('7일을 넘긴 종가와 조회 실패는 기존 수동 입력값을 유�
     await request;
 
     assert.equal(fixture.context.el.futureReferencePrice.value, '100');
+    assert.equal(fixture.context.el.futureAccountEquity.value, '450');
     assert.equal(fixture.state.recalculations, 0);
     assert.match(fixture.state.statuses.at(-1).message, /오래되어 적용하지 않았습니다/);
 });

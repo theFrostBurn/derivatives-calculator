@@ -30,7 +30,8 @@ test('선물 결과는 차트 아래 요약 영역에 배치되고 모드별 레
     assert.match(html, /id="futureMinimumBoundary"/);
     assert.match(html, /for="futureReferencePrice">기초자산 기준가격<\/label>/);
     assert.match(html, /통상 전일 KRX 본장 종가 · HTS 값 입력/);
-    assert.match(html, /id="marketCloseFetchBtn"[^>]*>전일 KRX 종가 불러오기<\/button>/);
+    assert.match(html, /class="button data-fetch-button" id="marketCloseFetchBtn"[^>]*>전일 KRX 종가 불러오기<\/button>/);
+    assert.match(html, /id="futureAccountEquityHelp">종가 불러오기 시 현재 계약 수의 위탁증거금으로 자동 입력<\/div>/);
     assert.match(html, /for="futureCosts">예상 거래비용 합계<\/label>/);
     assert.match(html, /전체 계약 기준 · 진입·청산 수수료 등 직접 입력/);
     assert.match(html, /screenCode\.className = 'hts-screen-code'/);

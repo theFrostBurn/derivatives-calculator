@@ -188,6 +188,34 @@
             gap: 0.5rem;
         }
 
+        .data-fetch-button {
+            display: inline-flex;
+            min-height: 2.25rem;
+            align-items: center;
+            justify-content: center;
+            gap: 0.4rem;
+            border-color: rgba(76, 201, 240, 0.72);
+            background: rgba(76, 201, 240, 0.1);
+            color: #d9f7ff;
+            font-weight: 700;
+        }
+
+        .data-fetch-button::before {
+            content: '\21BB';
+            color: var(--desk-blue);
+            font-size: 1rem;
+            line-height: 1;
+        }
+
+        .data-fetch-button:hover:not(:disabled) {
+            border-color: var(--desk-blue);
+            background: rgba(76, 201, 240, 0.18);
+        }
+
+        .data-fetch-button:active:not(:disabled) {
+            background: rgba(76, 201, 240, 0.24);
+        }
+
         .error {
             font-size: 0.75rem;
             color: #fca5a5;
@@ -923,8 +951,8 @@
                     <label class="label" for="fxRate" id="fxRateLabel">환율 (KRW per USD)</label>
                     <input class="input" id="fxRate" type="number" value="1350" min="0" step="0.01">
                     <div class="help" id="fxRateHelp">예: 1350 = 1달러 1350원</div>
-                    <div style="display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap;">
-                        <button class="button" id="fxFetchBtn" type="button">환율 자동 불러오기</button>
+                    <div class="field-action-row">
+                        <button class="button data-fetch-button" id="fxFetchBtn" type="button">환율 자동 불러오기</button>
                         <span class="help" id="fxStatus"></span>
                     </div>
                 </div>
@@ -966,13 +994,14 @@
                             <input class="input" id="futureReferencePrice" type="number" min="0" step="any" aria-describedby="futureReferencePriceHelp">
                             <div class="help" id="futureReferencePriceHelp">통상 전일 KRX 본장 종가 · HTS 값 입력</div>
                             <div class="field-action-row">
-                                <button class="button" id="marketCloseFetchBtn" type="button">전일 KRX 종가 불러오기</button>
+                                <button class="button data-fetch-button" id="marketCloseFetchBtn" type="button">전일 KRX 종가 불러오기</button>
                                 <span class="help" id="marketCloseStatus" role="status" aria-live="polite"></span>
                             </div>
                         </div>
                         <div class="field">
                             <label class="label" for="futureAccountEquity">계좌 투입금액</label>
-                            <input class="input" id="futureAccountEquity" type="number" min="0" step="1">
+                            <input class="input" id="futureAccountEquity" type="number" min="0" step="1" aria-describedby="futureAccountEquityHelp">
+                            <div class="help" id="futureAccountEquityHelp">종가 불러오기 시 현재 계약 수의 위탁증거금으로 자동 입력</div>
                         </div>
                         <div class="field">
                             <label class="label" for="futureInitialMarginRate">위탁증거금률 (%)</label>
@@ -2370,6 +2399,9 @@
         // EXPIRY_ENGINE_END
 
         const STORAGE = {
+            defaultInstrumentType: 'derivativesCalculator.defaults.instrumentType',
+            defaultOptionProductId: 'derivativesCalculator.defaults.product.option',
+            defaultFutureProductId: 'derivativesCalculator.defaults.product.future',
             selectedProductId: 'derivativesCalculator.selectedProductId',
             selectedProductCode: 'derivativesCalculator.selectedProductCode',
             selectedInstrumentType: 'derivativesCalculator.selectedInstrumentType',
@@ -2529,6 +2561,37 @@
             return `derivativesCalculator.defaults.future.${productKey}.${field}`;
         }
 
+        // DEFAULT_PRODUCT_SELECTION_START
+        function getDefaultProductStorageKey(instrumentType) {
+            return instrumentType === 'future'
+                ? STORAGE.defaultFutureProductId
+                : STORAGE.defaultOptionProductId;
+        }
+
+        function findProductByCode(code) {
+            if (!code) return null;
+            return PRODUCTS.find((product) => (product.id ?? product.code) === code)
+                ?? PRODUCTS.find((product) => product.code === code)
+                ?? null;
+        }
+
+        function getSavedProductIdForInstrument(instrumentType) {
+            const normalizedType = instrumentType === 'future' ? 'future' : 'option';
+            const storedId = safeGetItem(getDefaultProductStorageKey(normalizedType));
+            const storedProduct = findProductByCode(storedId);
+            if (storedProduct?.instrumentType === normalizedType) {
+                return storedProduct.id ?? storedProduct.code;
+            }
+
+            const legacyId = safeGetItem(STORAGE.selectedProductId)
+                || safeGetItem(STORAGE.selectedProductCode);
+            const legacyProduct = findProductByCode(legacyId);
+            return legacyProduct?.instrumentType === normalizedType
+                ? (legacyProduct.id ?? legacyProduct.code)
+                : null;
+        }
+        // DEFAULT_PRODUCT_SELECTION_END
+
         function applySavedQuoteForProduct(productKey) {
             const raw = safeGetItem(getQuoteDefaultKey(productKey));
             if (raw && String(raw).trim()) el.quotePrice.value = String(raw);
@@ -2572,9 +2635,12 @@
             safeSetItem(STORAGE.selectedProductId, selectedKey);
             safeSetItem(STORAGE.selectedProductCode, selectedProduct.code);
             safeSetItem(STORAGE.selectedInstrumentType, selectedProduct.instrumentType);
+            safeSetItem(getDefaultProductStorageKey(selectedProduct.instrumentType), selectedKey);
+            safeSetItem(STORAGE.defaultInstrumentType, selectedProduct.instrumentType);
 
             updateFxStatus();
-            setDefaultsStatus(`저장됨 · ${new Date().toLocaleString('ko-KR')}`);
+            const typeLabel = selectedProduct.instrumentType === 'future' ? '선물' : '옵션';
+            setDefaultsStatus(`저장됨 · ${typeLabel} · ${selectedProduct.name} · ${new Date().toLocaleString('ko-KR')}`);
         }
 
         function formatAmount(value, digits = 2) {
@@ -2880,9 +2946,7 @@
         }
 
         function getProductByCode(code) {
-            const foundById = PRODUCTS.find((p) => (p.id ?? p.code) === code);
-            if (foundById) return foundById;
-            return PRODUCTS.find((p) => p.code === code)
+            return findProductByCode(code)
                 ?? PRODUCTS.find((p) => p.instrumentType === selectedInstrumentType)
                 ?? PRODUCTS[0];
         }
@@ -2934,11 +2998,13 @@
 
         function switchInstrumentType(instrumentType, preferredProductId = null) {
             selectedInstrumentType = instrumentType === 'future' ? 'future' : 'option';
-            safeSetItem(STORAGE.selectedInstrumentType, selectedInstrumentType);
+            setDefaultsStatus('');
             updateInstrumentVisibility();
             buildProductSelect(selectedInstrumentType);
 
-            const preferred = preferredProductId ? getProductByCode(preferredProductId) : null;
+            const preferredKey = preferredProductId
+                ?? getSavedProductIdForInstrument(selectedInstrumentType);
+            const preferred = findProductByCode(preferredKey);
             const product = preferred?.instrumentType === selectedInstrumentType
                 ? preferred
                 : PRODUCTS.find((item) => item.instrumentType === selectedInstrumentType);
@@ -3221,9 +3287,6 @@
                 el.depositNote.style.display = SAMSUNG_FEE_PRODUCTS.has(key) ? 'inline' : 'none';
             }
 
-            safeSetItem(STORAGE.selectedProductId, product.id ?? product.code);
-            safeSetItem(STORAGE.selectedProductCode, product.code);
-            safeSetItem(STORAGE.selectedInstrumentType, product.instrumentType);
             updateFxStatus();
         }
 
@@ -3375,6 +3438,23 @@
         }
 
         // MARKET_CLOSE_FETCH_START
+        function calculateFetchedMarketCloseInitialMargin(referencePrice) {
+            const contracts = Number(el.futureContracts.value);
+            const multiplier = Number(selectedProduct?.valuePerQuoteUnit);
+            const initialMarginRate = Number(el.futureInitialMarginRate.value);
+            if (
+                !Number.isInteger(contracts)
+                || contracts < 1
+                || !Number.isFinite(multiplier)
+                || multiplier <= 0
+                || !Number.isFinite(initialMarginRate)
+                || initialMarginRate <= 0
+                || initialMarginRate > 100
+            ) return null;
+
+            return Math.round(referencePrice * multiplier * contracts * (initialMarginRate / 100));
+        }
+
         async function fetchAndApplyMarketClose(force = false) {
             if (selectedProduct?.instrumentType !== 'future') return;
 
@@ -3400,7 +3480,11 @@
                 const rounded = selectedProduct.displayDecimals > 0
                     ? Number(close.toFixed(selectedProduct.displayDecimals))
                     : Math.round(close);
+                const requiredInitialMargin = calculateFetchedMarketCloseInitialMargin(rounded);
                 el.futureReferencePrice.value = String(rounded);
+                if (requiredInitialMargin !== null) {
+                    el.futureAccountEquity.value = String(requiredInitialMargin);
+                }
                 const sourceLabel = snapshot.source?.name ?? '금융위원회 공공데이터포털(KRX)';
                 setMarketCloseStatus(`${formatMarketCloseDate(item.asOf)} KRX 종가 · ${sourceLabel}`, 'success');
                 recalculate();
@@ -4054,14 +4138,19 @@
 
         function bootstrap() {
             updateCalendarCriticalAlert();
-            const savedId = safeGetItem(STORAGE.selectedProductId);
-            const savedCode = safeGetItem(STORAGE.selectedProductCode);
-            const initialKey = savedId || savedCode || 'OES';
-            const initialProduct = getProductByCode(initialKey);
-            const savedInstrumentType = safeGetItem(STORAGE.selectedInstrumentType);
-            const initialInstrumentType = savedInstrumentType || initialProduct.instrumentType || 'option';
+            const legacyId = safeGetItem(STORAGE.selectedProductId)
+                || safeGetItem(STORAGE.selectedProductCode);
+            const legacyProduct = findProductByCode(legacyId);
+            const savedInstrumentType = safeGetItem(STORAGE.defaultInstrumentType)
+                || safeGetItem(STORAGE.selectedInstrumentType);
+            const initialInstrumentType = savedInstrumentType === 'future' || savedInstrumentType === 'option'
+                ? savedInstrumentType
+                : (legacyProduct?.instrumentType ?? 'option');
+            const initialKey = getSavedProductIdForInstrument(initialInstrumentType)
+                ?? (initialInstrumentType === 'option' ? 'OES' : null);
 
             el.productSelect.addEventListener('change', () => {
+                setDefaultsStatus('');
                 const product = getProductByCode(el.productSelect.value);
                 updateProductUI(product);
                 if (product.instrumentType === 'future') {
