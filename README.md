@@ -18,7 +18,8 @@
 ### 선물
 
 - 삼성전자선물, SK하이닉스선물, 미니 코스피200선물, 코스피200선물
-- 롱·숏, 계약 수, 진입가격, 현재가격, 증거금 기준가격 입력
+- 롱·숏, 계약 수, 진입가격, 현재가격, 기초자산 기준가격 입력
+- 금융위원회 공공데이터포털(KRX)의 전일 종가 자동 입력
 - 1계약 진입에 필요한 위탁증거금 최상단 표시
 - 추가 예치금이 없는 1계약의 유지증거금 미달 추정 가격·변동률 최상단 표시
 - 명목금액, 위탁증거금, 유지증거금, 레버리지
@@ -42,6 +43,9 @@
 - `tests/futures.test.cjs`: 선물 증거금·손익 계산 테스트
 - `tests/options.test.cjs`: 옵션 수수료·손익분기·차트 범위 회귀 테스트
 - `tests/fx.test.cjs`: 환율 캐시와 비동기 요청 회귀 테스트
+- `tests/market-close.test.cjs`: 전일 종가 조회·응답 경합·자료 생성 회귀 테스트
+- `scripts/update-market-close.mjs`: 공식 주식·지수 종가를 `data/market-close.json`으로 생성
+- `.github/workflows/update-market-close.yml`: 평일 오후 종가 파일 자동 갱신
 
 ## 실행 방법
 
@@ -62,7 +66,7 @@ http://localhost:8000/
 별도 패키지 설치 없이 Node.js 내장 테스트 러너를 사용합니다.
 
 ```powershell
-node --test .\tests\expiry.test.cjs .\tests\futures.test.cjs .\tests\options.test.cjs .\tests\fx.test.cjs
+node --test .\tests\expiry.test.cjs .\tests\futures.test.cjs .\tests\options.test.cjs .\tests\fx.test.cjs .\tests\market-close.test.cjs
 ```
 
 ## 데이터 모델
@@ -82,7 +86,7 @@ node --test .\tests\expiry.test.cjs .\tests\futures.test.cjs .\tests\options.tes
 ```text
 옵션 프리미엄 총액 = 옵션가격 × 계약 승수
 
-선물 명목금액 = 증거금 기준가격 × 계약 승수 × 계약 수
+선물 명목금액 = 기초자산 기준가격 × 계약 승수 × 계약 수
 위탁증거금 = 명목금액 × 위탁증거금률
 유지증거금 = 명목금액 × 유지증거금률
 평가손익 = (현재가격 - 진입가격) × 계약 승수 × 계약 수 × 방향부호
@@ -94,11 +98,13 @@ node --test .\tests\expiry.test.cjs .\tests\futures.test.cjs .\tests\options.tes
 
 기준가격과 증거금률은 고정 계약 사양이 아닙니다. 앱에 포함된 4개 선물의 수치는 조회일이 남아 있지 않은 과거 삼성증권 HTS 전사값을 재현한 예시입니다. 화면에서 값을 수정할 수 있으며, 실제 주문 전 당일 HTS 수치를 다시 입력해야 합니다.
 
+`전일 KRX 종가 불러오기`는 기초자산의 KRX 본장 종가를 편의상 입력하는 기능입니다. 배당락·액면분할 등으로 증권사가 적용한 기준가격과 다를 수 있으므로, 실제 증거금 계산 전 삼성증권 HTS **2225·2206** 화면과 대조해야 합니다. 7일을 넘긴 자료는 자동 적용하지 않고 현재 입력값을 유지합니다.
+
 `유지증거금 미달 추정 경계`는 다음을 가정한 단순 계산입니다.
 
 - 입력한 증거금률이 유지됨
 - 다른 포지션과 추가 입출금이 없음
-- 입력한 예상 총비용 외 비용이 없음
+- 입력한 예상 거래비용 합계 외 비용이 없음
 - 유지증거금 미달과 실제 반대매매가 같은 시점이라는 의미가 아님
 
 옵션 수수료도 앱의 기본 추정값입니다. 실제 수수료는 상품과 계좌 조건에 따라 달라질 수 있으므로 주문 전 증권사 수수료 화면을 확인해야 합니다.
@@ -124,6 +130,24 @@ node --test .\tests\expiry.test.cjs .\tests\futures.test.cjs .\tests\options.tes
 - 자동·수동 환율은 통화별로 브라우저 `localStorage`에 저장하며 캐시 TTL은 6시간
 - KRW 상품은 환율 미적용
 - 저장 키: `derivativesCalculator.*`
+
+## 전일 KRX 종가 자동 갱신 설정
+
+정적 페이지에 인증키가 노출되지 않도록 GitHub Actions가 공식 API를 호출하고, 브라우저는 공개 결과 파일인 `data/market-close.json`만 읽습니다.
+
+1. 공공데이터포털에서 [금융위원회 주식시세정보](https://www.data.go.kr/data/15094808/openapi.do)와 [금융위원회 지수시세정보](https://www.data.go.kr/data/15094807/openapi.do)를 활용 신청합니다.
+2. GitHub 저장소의 `Settings → Secrets and variables → Actions`에 `DATA_GO_KR_SERVICE_KEY`라는 Repository secret을 추가합니다.
+3. Actions의 `전일 KRX 종가 갱신` 워크플로를 한 번 수동 실행합니다.
+
+이후 워크플로는 평일 한국시간 오후 2시 30분에 실행되어 삼성전자·SK하이닉스·코스피200의 동일 기준일 종가만 반영합니다. 공식 API는 실시간 시세가 아니며 기준일 다음 영업일 오후 1시 이후 갱신되므로, 오전에는 최신 전일 자료가 아직 없을 수 있습니다. 인증키는 결과 파일이나 브라우저 코드에 기록되지 않습니다.
+
+로컬에서 직접 갱신할 때는 PowerShell 7에서 다음과 같이 실행합니다.
+
+```powershell
+$env:DATA_GO_KR_SERVICE_KEY = '<공공데이터포털 인증키>'
+node .\scripts\update-market-close.mjs
+Remove-Item Env:DATA_GO_KR_SERVICE_KEY
+```
 
 ## 만기 일정 범위
 

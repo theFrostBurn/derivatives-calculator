@@ -28,6 +28,14 @@ test('선물 결과는 차트 아래 요약 영역에 배치되고 모드별 레
     assert.match(html, /calculatorContent\.dataset\.instrumentType = selectedInstrumentType/);
     assert.match(html, /id="futureOneContractMargin"/);
     assert.match(html, /id="futureMinimumBoundary"/);
+    assert.match(html, /for="futureReferencePrice">기초자산 기준가격<\/label>/);
+    assert.match(html, /통상 전일 KRX 본장 종가 · HTS 값 입력/);
+    assert.match(html, /id="marketCloseFetchBtn"[^>]*>전일 KRX 종가 불러오기<\/button>/);
+    assert.match(html, /for="futureCosts">예상 거래비용 합계<\/label>/);
+    assert.match(html, /전체 계약 기준 · 진입·청산 수수료 등 직접 입력/);
+    assert.match(html, /screenCode\.className = 'hts-screen-code'/);
+    assert.match(html, /screenCode\.textContent = screen/);
+    assert.match(html, /기초자산 기준가격 \$\{referencePriceText\} × 승수 \$\{selectedProduct\.multiplierText\} × 위탁증거금률/);
     assert.match(html, /formatAmount\(Number\(input\.initialMarginRate\), 2\)/);
 });
 
@@ -39,7 +47,7 @@ test('선물 차트는 현재가와 정확한 위험 기준을 숫자형 가격�
     assert.match(chartMatch[0], /const currentPrice = Number\(input\.currentPrice\)/);
     assert.match(chartMatch[0], /type: 'linear'/);
     assert.match(chartMatch[0], /markerDataset\('현재가격'/);
-    assert.match(chartMatch[0], /입력 기준가격 기준 유지증거금\(고정\)/);
+    assert.match(chartMatch[0], /입력 기초자산 기준가격 기준 유지증거금\(고정\)/);
 });
 
 function input(overrides = {}) {

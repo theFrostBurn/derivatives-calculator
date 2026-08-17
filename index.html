@@ -181,6 +181,13 @@
             line-height: 1.25;
         }
 
+        .field-action-row {
+            display: flex;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 0.5rem;
+        }
+
         .error {
             font-size: 0.75rem;
             color: #fca5a5;
@@ -648,6 +655,13 @@
             color: #b9ebff;
         }
 
+        .hts-screen-code {
+            color: var(--desk-amber);
+            font-weight: 700;
+            font-variant-numeric: tabular-nums;
+            letter-spacing: 0.04em;
+        }
+
         .future-results {
             display: grid;
             grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -948,8 +962,13 @@
                             <input class="input" id="futureCurrentPrice" type="number" min="0" step="any">
                         </div>
                         <div class="field">
-                            <label class="label" for="futureReferencePrice">증거금 기준가격</label>
-                            <input class="input" id="futureReferencePrice" type="number" min="0" step="any">
+                            <label class="label" for="futureReferencePrice">기초자산 기준가격</label>
+                            <input class="input" id="futureReferencePrice" type="number" min="0" step="any" aria-describedby="futureReferencePriceHelp">
+                            <div class="help" id="futureReferencePriceHelp">통상 전일 KRX 본장 종가 · HTS 값 입력</div>
+                            <div class="field-action-row">
+                                <button class="button" id="marketCloseFetchBtn" type="button">전일 KRX 종가 불러오기</button>
+                                <span class="help" id="marketCloseStatus" role="status" aria-live="polite"></span>
+                            </div>
                         </div>
                         <div class="field">
                             <label class="label" for="futureAccountEquity">계좌 투입금액</label>
@@ -964,8 +983,9 @@
                             <input class="input" id="futureMaintenanceMarginRate" type="number" min="0" max="100" step="0.01">
                         </div>
                         <div class="field">
-                            <label class="label" for="futureCosts">예상 총비용</label>
-                            <input class="input" id="futureCosts" type="number" value="0" min="0" step="1">
+                            <label class="label" for="futureCosts">예상 거래비용 합계</label>
+                            <input class="input" id="futureCosts" type="number" value="0" min="0" step="1" aria-describedby="futureCostsHelp">
+                            <div class="help" id="futureCostsHelp">전체 계약 기준 · 진입·청산 수수료 등 직접 입력</div>
                         </div>
                     </div>
 
@@ -1002,7 +1022,7 @@
                     <article class="future-decision-card">
                         <div class="future-decision-question">1계약 진입에 필요한 위탁증거금</div>
                         <div class="future-decision-value" id="futureOneContractMargin">-</div>
-                        <div class="future-decision-detail" id="futureOneContractMarginDetail">기준가격과 위탁증거금률로 계산합니다.</div>
+                        <div class="future-decision-detail" id="futureOneContractMarginDetail">기초자산 기준가격 × 승수 × 위탁증거금률로 계산합니다.</div>
                     </article>
                     <article class="future-decision-card">
                         <div class="future-decision-question">추가 예치 0원 시 마진콜 추정 경계</div>
@@ -1492,7 +1512,7 @@
                 multiplierText: '10주',
                 note: '1계약 = 삼성전자 10주 상당',
                 quoteUnitLabel: '원',
-                quoteHelp: '선물 진입가격과 증거금 기준가격을 입력하세요.',
+                quoteHelp: '선물 진입가격과 HTS의 기초자산 기준가격을 입력하세요.',
                 parseMode: 'number',
                 valuePerQuoteUnit: 10,
                 tickSize: 500,
@@ -1505,6 +1525,7 @@
                     maintenanceMarginRate: 30,
                     asOf: null,
                     broker: '삼성증권 HTS',
+                    htsScreens: ['2225', '2206'],
                     sourceUrl: 'https://www.samsungpop.com/ux/kor/customer/guide/workproductguide/futureOptionDomesticTab2.do',
                 },
             },
@@ -1522,7 +1543,7 @@
                 multiplierText: '10주',
                 note: '1계약 = SK하이닉스 10주 상당',
                 quoteUnitLabel: '원',
-                quoteHelp: '선물 진입가격과 증거금 기준가격을 입력하세요.',
+                quoteHelp: '선물 진입가격과 HTS의 기초자산 기준가격을 입력하세요.',
                 parseMode: 'number',
                 valuePerQuoteUnit: 10,
                 tickSize: 1000,
@@ -1535,6 +1556,7 @@
                     maintenanceMarginRate: 32.3,
                     asOf: null,
                     broker: '삼성증권 HTS',
+                    htsScreens: ['2225', '2206'],
                     sourceUrl: 'https://www.samsungpop.com/ux/kor/customer/guide/workproductguide/futureOptionDomesticTab2.do',
                 },
             },
@@ -1552,7 +1574,7 @@
                 multiplierText: '50,000원/포인트',
                 note: '지수 1포인트당 50,000원',
                 quoteUnitLabel: '포인트',
-                quoteHelp: '선물 진입가격과 증거금 기준가격을 입력하세요.',
+                quoteHelp: '선물 진입가격과 HTS의 기초자산 기준가격을 입력하세요.',
                 parseMode: 'number',
                 valuePerQuoteUnit: 50000,
                 tickSize: 0.02,
@@ -1565,6 +1587,7 @@
                     maintenanceMarginRate: 14,
                     asOf: null,
                     broker: '삼성증권 HTS',
+                    htsScreens: ['2225', '2206'],
                     sourceUrl: 'https://www.samsungpop.com/ux/kor/customer/guide/workproductguide/futureOptionDomesticTab2.do',
                 },
             },
@@ -1582,7 +1605,7 @@
                 multiplierText: '250,000원/포인트',
                 note: '지수 1포인트당 250,000원',
                 quoteUnitLabel: '포인트',
-                quoteHelp: '선물 진입가격과 증거금 기준가격을 입력하세요.',
+                quoteHelp: '선물 진입가격과 HTS의 기초자산 기준가격을 입력하세요.',
                 parseMode: 'number',
                 valuePerQuoteUnit: 250000,
                 tickSize: 0.05,
@@ -1595,6 +1618,7 @@
                     maintenanceMarginRate: 14,
                     asOf: null,
                     broker: '삼성증권 HTS',
+                    htsScreens: ['2225', '2206'],
                     sourceUrl: 'https://www.samsungpop.com/ux/kor/customer/guide/workproductguide/futureOptionDomesticTab2.do',
                 },
             },
@@ -2352,6 +2376,8 @@
         };
 
         const FX_CACHE_TTL_MS = 6 * 60 * 60 * 1000;
+        const MARKET_CLOSE_MAX_AGE_DAYS = 7;
+        const MARKET_CLOSE_DATA_URL = './data/market-close.json';
 
         const DEFAULT_FX = {
             USD: 1350,
@@ -2368,6 +2394,8 @@
         ]);
         const FX_MEMORY = {};
         let fxRequestSequence = 0;
+        let marketCloseSnapshot = null;
+        let marketCloseRequestSequence = 0;
 
         const el = {
             calculatorContent: document.getElementById('calculatorContent'),
@@ -2439,6 +2467,8 @@
             futureEntryPrice: document.getElementById('futureEntryPrice'),
             futureCurrentPrice: document.getElementById('futureCurrentPrice'),
             futureReferencePrice: document.getElementById('futureReferencePrice'),
+            marketCloseFetchBtn: document.getElementById('marketCloseFetchBtn'),
+            marketCloseStatus: document.getElementById('marketCloseStatus'),
             futureAccountEquity: document.getElementById('futureAccountEquity'),
             futureInitialMarginRate: document.getElementById('futureInitialMarginRate'),
             futureMaintenanceMarginRate: document.getElementById('futureMaintenanceMarginRate'),
@@ -3129,7 +3159,17 @@
                 const snapshot = product.marginSnapshot ?? {};
                 el.futureDataStamp.replaceChildren();
                 const stampText = document.createElement('span');
-                stampText.textContent = `증거금 예시: ${snapshot.broker ?? '출처 미상'} · 기준일 ${snapshot.asOf ?? '기록 없음'} · `;
+                stampText.textContent = `입력값 조회: ${snapshot.broker ?? '출처 미상'}`;
+                el.futureDataStamp.append(stampText);
+                if (Array.isArray(snapshot.htsScreens)) {
+                    snapshot.htsScreens.forEach((screen, index) => {
+                        const screenCode = document.createElement('strong');
+                        screenCode.className = 'hts-screen-code';
+                        screenCode.textContent = screen;
+                        el.futureDataStamp.append(document.createTextNode(index === 0 ? ' ' : '·'), screenCode);
+                    });
+                }
+                const stampSuffix = document.createTextNode(` · 기준일 ${snapshot.asOf ?? '직접 확인'} · `);
                 const marginLink = document.createElement('a');
                 marginLink.href = snapshot.sourceUrl ?? '#';
                 marginLink.target = '_blank';
@@ -3141,7 +3181,8 @@
                 specLink.target = '_blank';
                 specLink.rel = 'noopener noreferrer';
                 specLink.textContent = 'KRX 계약 명세';
-                el.futureDataStamp.append(stampText, marginLink, separator, specLink);
+                el.futureDataStamp.append(stampSuffix, marginLink, separator, specLink);
+                updateMarketCloseStatus();
             }
 
             el.quotePriceLabel.textContent = `현재가 (${product.quoteUnitLabel})`;
@@ -3189,6 +3230,23 @@
         function setFxStatus(message, tone = 'info') {
             el.fxStatus.textContent = message || '';
             el.fxStatus.style.color = tone === 'error' ? '#fca5a5' : '#9ca3af';
+        }
+
+        function setMarketCloseStatus(message, tone = 'info') {
+            el.marketCloseStatus.textContent = message || '';
+            el.marketCloseStatus.style.color = tone === 'error'
+                ? '#fca5a5'
+                : (tone === 'success' ? '#86efac' : '#9ca3af');
+        }
+
+        function updateMarketCloseStatus() {
+            if (selectedProduct?.instrumentType !== 'future') return;
+            const item = marketCloseSnapshot?.items?.[selectedProduct.id ?? selectedProduct.code];
+            if (item?.asOf && Number(item.close) > 0) {
+                setMarketCloseStatus(`${formatMarketCloseDate(item.asOf)} KRX 종가 조회 가능`);
+                return;
+            }
+            setMarketCloseStatus('공식 종가 파일 기준 · HTS 2225·2206 확인 권장');
         }
 
         function formatDateTime(ts) {
@@ -3270,6 +3328,103 @@
                 clearTimeout(timer);
             }
         }
+
+        function parseMarketCloseDate(value) {
+            const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(value ?? ''));
+            if (!match) return null;
+            const year = Number(match[1]);
+            const month = Number(match[2]);
+            const day = Number(match[3]);
+            const date = new Date(Date.UTC(year, month - 1, day));
+            if (
+                date.getUTCFullYear() !== year
+                || date.getUTCMonth() !== month - 1
+                || date.getUTCDate() !== day
+            ) return null;
+            return date;
+        }
+
+        function formatMarketCloseDate(value) {
+            const date = parseMarketCloseDate(value);
+            if (!date) return String(value ?? '기준일 미상');
+            return `${date.getUTCFullYear()}. ${date.getUTCMonth() + 1}. ${date.getUTCDate()}.`;
+        }
+
+        function getMarketCloseAgeDays(asOf, now = new Date()) {
+            const date = parseMarketCloseDate(asOf);
+            if (!date) return Number.POSITIVE_INFINITY;
+            const koreaDate = getMarketDate('Asia/Seoul', now);
+            const todayUtc = Date.UTC(koreaDate.year, koreaDate.month - 1, koreaDate.day);
+            return Math.floor((todayUtc - date.getTime()) / (24 * 60 * 60 * 1000));
+        }
+
+        function validateMarketCloseSnapshot(snapshot) {
+            if (!snapshot || snapshot.schemaVersion !== 1 || !snapshot.items || typeof snapshot.items !== 'object') {
+                throw new Error('invalid market close snapshot');
+            }
+            return snapshot;
+        }
+
+        async function fetchMarketCloseSnapshot(force = false) {
+            if (!force && marketCloseSnapshot) return marketCloseSnapshot;
+            const url = new URL(MARKET_CLOSE_DATA_URL, window.location.href);
+            if (force) url.searchParams.set('refresh', String(Date.now()));
+            const snapshot = validateMarketCloseSnapshot(await fetchJsonWithTimeout(url.toString()));
+            marketCloseSnapshot = snapshot;
+            return snapshot;
+        }
+
+        // MARKET_CLOSE_FETCH_START
+        async function fetchAndApplyMarketClose(force = false) {
+            if (selectedProduct?.instrumentType !== 'future') return;
+
+            const productId = selectedProduct.id ?? selectedProduct.code;
+            const requestId = ++marketCloseRequestSequence;
+            el.marketCloseFetchBtn.disabled = true;
+            setMarketCloseStatus('전일 KRX 종가 불러오는 중...');
+
+            try {
+                const snapshot = await fetchMarketCloseSnapshot(force);
+                if (requestId !== marketCloseRequestSequence || (selectedProduct?.id ?? selectedProduct?.code) !== productId) return;
+
+                const item = snapshot.items[productId];
+                const close = Number(item?.close);
+                const ageDays = getMarketCloseAgeDays(item?.asOf);
+                if (!Number.isFinite(close) || close <= 0 || !Number.isFinite(ageDays)) {
+                    throw new Error('market close unavailable');
+                }
+                if (ageDays < 0 || ageDays > MARKET_CLOSE_MAX_AGE_DAYS) {
+                    throw new Error('market close stale');
+                }
+
+                const rounded = selectedProduct.displayDecimals > 0
+                    ? Number(close.toFixed(selectedProduct.displayDecimals))
+                    : Math.round(close);
+                el.futureReferencePrice.value = String(rounded);
+                const sourceLabel = snapshot.source?.name ?? '금융위원회 공공데이터포털(KRX)';
+                setMarketCloseStatus(`${formatMarketCloseDate(item.asOf)} KRX 종가 · ${sourceLabel}`, 'success');
+                recalculate();
+            } catch (err) {
+                const expectedUnavailable = err?.message === 'market close unavailable';
+                if (!expectedUnavailable && err?.message !== 'market close stale') {
+                    console.error('Market close fetch failed:', err);
+                }
+                if (requestId === marketCloseRequestSequence && (selectedProduct?.id ?? selectedProduct?.code) === productId) {
+                    const isStale = err?.message === 'market close stale';
+                    setMarketCloseStatus(
+                        isStale
+                            ? '공식 종가 자료가 오래되어 적용하지 않았습니다 · 현재 입력값 유지'
+                            : (expectedUnavailable
+                                ? '공식 종가 파일 준비 중 · 현재 입력값 유지'
+                                : '전일 종가 불러오기 실패 · 현재 입력값 유지'),
+                        'error',
+                    );
+                }
+            } finally {
+                if (requestId === marketCloseRequestSequence) el.marketCloseFetchBtn.disabled = false;
+            }
+        }
+        // MARKET_CLOSE_FETCH_END
 
         async function fetchFxRateToKrw(fromCurrency) {
             // Return number (KRW per fromCurrency)
@@ -3354,10 +3509,10 @@
                 return { valid: false, error: '계약 수는 1 이상의 정수로 입력해 주세요.' };
             }
             if (![multiplier, entryPrice, currentPrice, referencePrice].every((value) => Number.isFinite(value) && value > 0)) {
-                return { valid: false, error: '승수와 진입·현재·증거금 기준가격은 0보다 커야 합니다.' };
+                return { valid: false, error: '승수와 진입·현재·기초자산 기준가격은 0보다 커야 합니다.' };
             }
             if (![accountEquity, costs].every((value) => Number.isFinite(value) && value >= 0)) {
-                return { valid: false, error: '계좌 투입금액과 예상 총비용은 0 이상이어야 합니다.' };
+                return { valid: false, error: '계좌 투입금액과 예상 거래비용 합계는 0 이상이어야 합니다.' };
             }
             if (![initialMarginRate, maintenanceMarginRate].every((value) => Number.isFinite(value) && value > 0 && value <= 100)) {
                 return { valid: false, error: '증거금률은 0보다 크고 100 이하여야 합니다.' };
@@ -3654,7 +3809,7 @@
                             pointRadius: 0,
                         },
                         {
-                            label: '입력 기준가격 기준 유지증거금(고정)',
+                            label: '입력 기초자산 기준가격 기준 유지증거금(고정)',
                             data: uniquePrices.map((price) => ({ x: price, y: result.maintenanceMargin })),
                             borderColor: '#ffca58',
                             borderDash: [7, 5],
@@ -3761,8 +3916,11 @@
             const money = (value) => `${formatKrw(value)}원`;
             const moveDirection = result.minimumBoundaryMovePercent < 0 ? '하락' : '상승';
             const movePercent = Math.abs(result.minimumBoundaryMovePercent);
+            const referencePriceText = selectedProduct.quoteUnitLabel === '원'
+                ? money(Number(input.referencePrice))
+                : `${formatAmount(Number(input.referencePrice), selectedProduct.displayDecimals)} ${selectedProduct.quoteUnitLabel}`;
             el.futureOneContractMargin.textContent = money(result.oneContractInitialMargin);
-            el.futureOneContractMarginDetail.textContent = `명목금액 ${money(result.oneContractNotional)} × 위탁증거금률 ${formatAmount(Number(input.initialMarginRate), 2)}%`;
+            el.futureOneContractMarginDetail.textContent = `기초자산 기준가격 ${referencePriceText} × 승수 ${selectedProduct.multiplierText} × 위탁증거금률 ${formatAmount(Number(input.initialMarginRate), 2)}%`;
             if (result.minimumBoundaryPrice <= 0) {
                 el.futureMinimumBoundary.textContent = '가격 0 이상에서는 미달 없음';
             } else {
@@ -3795,7 +3953,7 @@
             el.chartUnavailable.style.display = 'none';
             el.chartCanvas.style.display = 'block';
             const directionLabel = input.direction === 'short' ? '매도(숏)' : '매수(롱)';
-            el.chartContext.textContent = `${directionLabel} ${result.contracts}계약 · 진입가·현재가·미달 경계 표시 · 유지증거금은 입력 기준가격 기준으로 고정`;
+            el.chartContext.textContent = `${directionLabel} ${result.contracts}계약 · 진입가·현재가·미달 경계 표시 · 유지증거금은 입력 기초자산 기준가격 기준으로 고정`;
             updateFuturesChart(selectedProduct, result, input);
         }
 
@@ -3929,13 +4087,18 @@
                 updateFxStatus();
                 recalculate();
             });
+            el.futureReferencePrice.addEventListener('input', () => {
+                marketCloseRequestSequence += 1;
+                el.marketCloseFetchBtn.disabled = false;
+                setMarketCloseStatus('직접 입력값 · HTS 2225·2206 확인 권장');
+                recalculate();
+            });
             el.profitPercentage.addEventListener('input', recalculate);
             for (const node of [
                 el.futureDirection,
                 el.futureContracts,
                 el.futureEntryPrice,
                 el.futureCurrentPrice,
-                el.futureReferencePrice,
                 el.futureAccountEquity,
                 el.futureInitialMarginRate,
                 el.futureMaintenanceMarginRate,
@@ -3944,6 +4107,7 @@
                 node.addEventListener(node.tagName === 'SELECT' ? 'change' : 'input', recalculate);
             }
             el.fxFetchBtn.addEventListener('click', () => fetchAndApplyFxRate(true));
+            el.marketCloseFetchBtn.addEventListener('click', () => fetchAndApplyMarketClose(true));
             el.saveDefaultsBtn.addEventListener('click', () => saveCurrentAsDefaults());
             document.addEventListener('visibilitychange', () => {
                 if (!document.hidden) refreshExpiryUIIfDateChanged();

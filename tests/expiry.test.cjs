@@ -104,6 +104,11 @@ test('옵션 26개와 선물 4개가 고유 ID와 등록된 만기 규칙을 사
     for (const product of products.filter((item) => item.instrumentType === 'future')) {
         assert.equal(product.pricingModel, 'futuresMargin', product.id);
         assert.ok(product.marginSnapshot, `${product.id}에 증거금 스냅샷이 필요합니다.`);
+        assert.deepEqual(
+            Array.from(product.marginSnapshot.htsScreens ?? []),
+            ['2225', '2206'],
+            `${product.id}에 HTS 조회 화면이 필요합니다.`,
+        );
         assert.ok(Number(product.valuePerQuoteUnit) > 0, `${product.id}에 승수가 필요합니다.`);
         assert.ok(Number(product.tickSize) > 0, `${product.id}에 틱 크기가 필요합니다.`);
     }

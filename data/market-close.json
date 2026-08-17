@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "generatedAt": null,
+  "source": {
+    "name": "금융위원회 공공데이터포털(KRX)",
+    "stockApi": "https://www.data.go.kr/data/15094808/openapi.do",
+    "indexApi": "https://www.data.go.kr/data/15094807/openapi.do",
+    "updateNote": "GitHub Secret 설정 후 자동 갱신됩니다."
+  },
+  "items": {}
+}
