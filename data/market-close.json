@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-08-17T20:52:14.041Z",
+  "generatedAt": "2026-08-18T10:31:44.129Z",
   "source": {
     "name": "금융위원회 공공데이터포털(KRX)",
     "stockApi": "https://www.data.go.kr/data/15094808/openapi.do",
@@ -11,26 +11,26 @@
     "FUTURE_SAMSUNG": {
       "underlying": "삼성전자",
       "code": "005930",
-      "asOf": "2026-08-13",
-      "close": 268000
+      "asOf": "2026-08-14",
+      "close": 274500
     },
     "FUTURE_SK_HYNIX": {
       "underlying": "SK하이닉스",
       "code": "000660",
-      "asOf": "2026-08-13",
-      "close": 1593000
+      "asOf": "2026-08-14",
+      "close": 1645000
     },
     "FUTURE_KOSPI200_MINI": {
       "underlying": "코스피200",
       "code": "KOSPI200",
-      "asOf": "2026-08-13",
-      "close": 1071.24
+      "asOf": "2026-08-14",
+      "close": 1098.18
     },
     "FUTURE_KOSPI200": {
       "underlying": "코스피200",
       "code": "KOSPI200",
-      "asOf": "2026-08-13",
-      "close": 1071.24
+      "asOf": "2026-08-14",
+      "close": 1098.18
     }
   }
 }
