@@ -1,10 +1,12 @@
-import { mkdir, rename, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
+import { isDeepStrictEqual } from 'node:util';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const STOCK_API_URL = 'https://apis.data.go.kr/1160100/service/GetStockSecuritiesInfoService/getStockPriceInfo';
 const INDEX_API_URL = 'https://apis.data.go.kr/1160100/service/GetMarketIndexInfoService/getStockMarketIndex';
 const DAY_MS = 24 * 60 * 60 * 1000;
+const API_RETRY_DELAYS_MS = [2_000, 5_000, 10_000];
 
 const STOCK_TARGETS = [
     { productId: 'FUTURE_SAMSUNG', ticker: '005930', name: '삼성전자' },
@@ -88,6 +90,14 @@ export function selectLatestCommonClose(stockItemsByProduct, indexItems) {
     };
 }
 
+export function hasSameMarketCloseItems(previousSnapshot, nextSnapshot) {
+    return Boolean(
+        previousSnapshot?.items
+        && nextSnapshot?.items
+        && isDeepStrictEqual(previousSnapshot.items, nextSnapshot.items),
+    );
+}
+
 function createApiUrl(endpoint, serviceKey, params) {
     const url = new URL(endpoint);
     url.searchParams.set('serviceKey', serviceKey);
@@ -98,16 +108,70 @@ function createApiUrl(endpoint, serviceKey, params) {
     return url;
 }
 
-async function fetchApiItems(endpoint, serviceKey, params, fetchImpl = fetch) {
-    const response = await fetchImpl(createApiUrl(endpoint, serviceKey, params), {
-        headers: { Accept: 'application/json' },
-        signal: AbortSignal.timeout(15_000),
-    });
-    if (!response.ok) throw new Error(`공공데이터 API HTTP ${response.status}`);
-    return extractItems(await response.json());
+function wait(milliseconds) {
+    return new Promise((resolve) => setTimeout(resolve, milliseconds));
 }
 
-export async function buildMarketCloseSnapshot({ serviceKey, now = new Date(), fetchImpl = fetch }) {
+function writeRetryLog(message) {
+    process.stderr.write(`[종가 갱신] ${message}\n`);
+}
+
+function formatSafeError(error, serviceKey) {
+    let message = error instanceof Error ? error.message : String(error);
+    const causeCode = error?.cause?.code;
+    if (causeCode && !message.includes(causeCode)) message = `${message} (${causeCode})`;
+
+    const secretVariants = [serviceKey, encodeURIComponent(serviceKey)]
+        .filter((value) => typeof value === 'string' && value.length >= 4);
+    for (const secret of secretVariants) message = message.replaceAll(secret, '***');
+    return message;
+}
+
+async function fetchApiItems(endpoint, serviceKey, params, options = {}) {
+    const {
+        fetchImpl = fetch,
+        label = '공공데이터 API',
+        logger = writeRetryLog,
+        retryDelays = API_RETRY_DELAYS_MS,
+        sleepImpl = wait,
+    } = options;
+    const requestUrl = createApiUrl(endpoint, serviceKey, params);
+    const totalAttempts = retryDelays.length + 1;
+
+    for (let attemptIndex = 0; attemptIndex < totalAttempts; attemptIndex += 1) {
+        try {
+            const response = await fetchImpl(requestUrl, {
+                headers: { Accept: 'application/json' },
+                signal: AbortSignal.timeout(15_000),
+            });
+            if (!response.ok) throw new Error(`HTTP ${response.status}`);
+            return extractItems(await response.json());
+        } catch (error) {
+            const attempt = attemptIndex + 1;
+            const safeError = formatSafeError(error, serviceKey);
+            if (attempt === totalAttempts) {
+                throw new Error(`${label} 조회 실패 (${attempt}/${totalAttempts}회 시도): ${safeError}`, {
+                    cause: error,
+                });
+            }
+
+            const retryDelay = retryDelays[attemptIndex];
+            logger(`${label} 요청 실패 (${attempt}/${totalAttempts}): ${safeError} · ${retryDelay / 1000}초 후 재시도`);
+            await sleepImpl(retryDelay);
+        }
+    }
+
+    throw new Error(`${label} 조회에 실패했습니다.`);
+}
+
+export async function buildMarketCloseSnapshot({
+    serviceKey,
+    now = new Date(),
+    fetchImpl = fetch,
+    logger = writeRetryLog,
+    retryDelays = API_RETRY_DELAYS_MS,
+    sleepImpl = wait,
+}) {
     const decodedKey = decodeServiceKey(serviceKey);
     const endDate = new Date(now.getTime() + DAY_MS);
     const beginDate = new Date(now.getTime() - 21 * DAY_MS);
@@ -120,7 +184,13 @@ export async function buildMarketCloseSnapshot({ serviceKey, now = new Date(), f
         const items = await fetchApiItems(STOCK_API_URL, decodedKey, {
             ...dateParams,
             likeSrtnCd: target.ticker,
-        }, fetchImpl);
+        }, {
+            fetchImpl,
+            label: `주식시세 ${target.name}(${target.ticker})`,
+            logger,
+            retryDelays,
+            sleepImpl,
+        });
         const exactItems = items.filter((item) => String(item.srtnCd) === target.ticker);
         if (!exactItems.length) throw new Error(`${target.name}(${target.ticker}) 종가를 찾지 못했습니다.`);
         return [target.productId, exactItems];
@@ -129,7 +199,13 @@ export async function buildMarketCloseSnapshot({ serviceKey, now = new Date(), f
     const indexItems = await fetchApiItems(INDEX_API_URL, decodedKey, {
         ...dateParams,
         likeIdxNm: '코스피',
-    }, fetchImpl);
+    }, {
+        fetchImpl,
+        label: '지수시세 코스피200',
+        logger,
+        retryDelays,
+        sleepImpl,
+    });
     const selected = selectLatestCommonClose(Object.fromEntries(stockEntries), indexItems);
 
     return {
@@ -178,6 +254,19 @@ async function main() {
     const outputDirectory = path.join(projectRoot, 'data');
     const outputPath = path.join(outputDirectory, 'market-close.json');
     const temporaryPath = `${outputPath}.tmp`;
+
+    try {
+        const previousSnapshot = JSON.parse(await readFile(outputPath, 'utf8'));
+        if (hasSameMarketCloseItems(previousSnapshot, snapshot)) {
+            process.stdout.write(`전일 KRX 종가 변경 없음: ${snapshot.items.FUTURE_SAMSUNG.asOf}\n`);
+            return;
+        }
+    } catch (error) {
+        if (error?.code !== 'ENOENT') {
+            process.stderr.write(`[종가 갱신] 기존 종가 파일을 읽지 못해 새로 작성합니다: ${error.message}\n`);
+        }
+    }
+
     await mkdir(outputDirectory, { recursive: true });
     await writeFile(temporaryPath, `${JSON.stringify(snapshot, null, 2)}\n`, 'utf8');
     await rename(temporaryPath, outputPath);

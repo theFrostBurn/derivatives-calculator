@@ -81,6 +81,7 @@ test('종가 자동 갱신 워크플로는 공개용 종가 JSON 하나만 GitHu
     assert.match(workflow, /cp data\/market-close\.json pages-market-close\/market-close\.json/);
     assert.match(workflow, /path: pages-market-close/);
     assert.match(workflow, /uses: actions\/deploy-pages@v5/);
+    assert.match(workflow, /cron: '30 5,7,9 \* \* 1-5'/);
     assert.doesNotMatch(workflow, /path: (?:['"]?\.['"]?|data)\s*$/m);
 });
 
@@ -163,7 +164,11 @@ test('7일을 넘긴 종가와 조회 실패는 기존 수동 입력값을 유�
 
 test('공식 시세 생성기는 동일 기준일의 주식·코스피200 종가만 선택한다', async () => {
     const modulePath = path.join(__dirname, '..', 'scripts', 'update-market-close.mjs');
-    const { extractItems, selectLatestCommonClose } = await import(pathToFileURL(modulePath).href);
+    const {
+        extractItems,
+        hasSameMarketCloseItems,
+        selectLatestCommonClose,
+    } = await import(pathToFileURL(modulePath).href);
 
     assert.deepEqual(extractItems({ response: { body: { items: { item: { basDt: '20260817' } } } } }), [
         { basDt: '20260817' },
@@ -195,6 +200,19 @@ test('공식 시세 생성기는 동일 기준일의 주식·코스피200 종가
         },
         kospi200: 1046.81,
     });
+
+    const previousSnapshot = {
+        generatedAt: '2026-08-18T05:30:00.000Z',
+        items: { FUTURE_SAMSUNG: { asOf: '2026-08-17', close: 274500 } },
+    };
+    assert.equal(hasSameMarketCloseItems(previousSnapshot, {
+        generatedAt: '2026-08-18T07:30:00.000Z',
+        items: { FUTURE_SAMSUNG: { asOf: '2026-08-17', close: 274500 } },
+    }), true);
+    assert.equal(hasSameMarketCloseItems(previousSnapshot, {
+        generatedAt: '2026-08-18T07:30:00.000Z',
+        items: { FUTURE_SAMSUNG: { asOf: '2026-08-18', close: 275000 } },
+    }), false);
 });
 
 test('공식 API 응답으로 네 선물의 공개 종가 파일을 구성하고 인증키는 남기지 않는다', async () => {
@@ -236,4 +254,55 @@ test('공식 API 응답으로 네 선물의 공개 종가 파일을 구성하고
         assert.equal(url.searchParams.get('serviceKey'), 'encoded+test=');
         assert.equal(url.searchParams.get('resultType'), 'json');
     }
+});
+
+test('공식 API 통신 실패는 세 번 재시도하고 대상과 시도 횟수만 안전하게 기록한다', async () => {
+    const modulePath = path.join(__dirname, '..', 'scripts', 'update-market-close.mjs');
+    const { buildMarketCloseSnapshot } = await import(pathToFileURL(modulePath).href);
+    const attempts = new Map();
+    const delays = [];
+    const logs = [];
+    const serviceKey = 'encoded%2Btest%3D';
+    const fetchImpl = async (url) => {
+        const target = url.searchParams.get('likeSrtnCd') ?? 'KOSPI200';
+        const attempt = (attempts.get(target) ?? 0) + 1;
+        attempts.set(target, attempt);
+
+        if (target === '005930' && attempt <= 3) {
+            throw new TypeError(`fetch failed: encoded+test=`);
+        }
+
+        const items = target === '005930'
+            ? [{ basDt: '20260817', srtnCd: '005930', clpr: '274500' }]
+            : target === '000660'
+                ? [{ basDt: '20260817', srtnCd: '000660', clpr: '1718000' }]
+                : [{ basDt: '20260817', idxNm: '코스피 200', clpr: '1046.81' }];
+        return {
+            ok: true,
+            json: async () => ({
+                response: {
+                    header: { resultCode: '00', resultMsg: 'NORMAL SERVICE' },
+                    body: { items: { item: items } },
+                },
+            }),
+        };
+    };
+
+    const snapshot = await buildMarketCloseSnapshot({
+        serviceKey,
+        now: new Date('2026-08-18T05:30:00.000Z'),
+        fetchImpl,
+        logger: (message) => logs.push(message),
+        retryDelays: [2_000, 5_000, 10_000],
+        sleepImpl: async (delay) => { delays.push(delay); },
+    });
+
+    assert.equal(snapshot.items.FUTURE_SAMSUNG.close, 274500);
+    assert.equal(attempts.get('005930'), 4);
+    assert.deepEqual(delays, [2_000, 5_000, 10_000]);
+    assert.equal(logs.length, 3);
+    assert.match(logs[0], /주식시세 삼성전자\(005930\) 요청 실패 \(1\/4\)/);
+    assert.match(logs[2], /\(3\/4\).*10초 후 재시도/);
+    assert.equal(logs.some((message) => message.includes('encoded+test=')), false);
+    assert.equal(logs.every((message) => message.includes('***')), true);
 });
